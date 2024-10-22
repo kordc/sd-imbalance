@@ -1,0 +1,3 @@
+model:
+  name: resnet18        # Can be resnet18 or resnet50
+  pretrained: true      # Whether to use pretrained weights
