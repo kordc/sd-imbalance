@@ -4,8 +4,10 @@ dataset:
   num_classes: 10        # Number of classes for CIFAR-10
 
   undersample:
-    classes: [0, 1, 2]   # Classes to undersample
-    percentage: 50       # Percentage of original data to retain for these classes
+    # CIFAR-10 classes dict: {0: 'airplane', 1: 'automobile', 2: 'bird', 3: 'cat', 4: 'deer', 5: 'dog', 
+    # 6: 'frog', 7: 'horse', 8: 'ship', 9: 'truck'}
+    classes: [3]   # Classes to undersample
+    percentage: 10      # Percentage of original data to retain for these classes
 
   augmentation:          # Optional: Data augmentation settings
     apply: true
