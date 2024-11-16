@@ -1,4 +1,0 @@
-augmentation:
-  random_flip: true
-  random_crop: false
-  normalize: true

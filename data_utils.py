@@ -69,7 +69,6 @@ class CustomDataset:
             raise ValueError(f"Unsupported split {split}")
 
 
-@hydra.main(config_path="configs", config_name="default")
 def get_dataloader(config: DictConfig, split='train'):
     dataset = CustomDataset(config)
     return dataset.get_dataloader(split=split)

@@ -4,12 +4,12 @@ import torch.nn as nn
 from omegaconf import DictConfig
 import hydra
 import os
-from data import get_dataloader
+from data_utils import get_dataloader
 from model import ResNetModel
-from utils import calculate_metrics, save_checkpoint, save_metrics_report
+from utils import calculate_metrics, save_checkpoint, save_metrics_report, plot_metrics
 
 
-@hydra.main(config_path="configs", config_name="default")
+@hydra.main(config_path="configs", config_name="default", version_base=None)
 def train(config: DictConfig):
     # Set seeds for reproducibility
     torch.manual_seed(config.train.seed)
@@ -86,6 +86,9 @@ def train(config: DictConfig):
     # Save metrics report
     save_metrics_report(
         metrics, filename=f'{config.model.name}_metrics_report.txt')
+
+    # Plot metrics
+    plot_metrics(metrics, config.model.name)
 
 
 def validate(model, dataloader, criterion):
