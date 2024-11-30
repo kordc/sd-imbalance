@@ -1,0 +1,16 @@
+defaults:
+  - override hydra/job_logging: colorlog
+
+downsample_class: null # Class to downsample, e.g., "cat"
+downsample_ratio: 1.0 # Ratio for downsampling
+epochs: 10 # Number of epochs
+batch_size: 64 # Batch size
+learning_rate: 0.01 # Learning rate
+val_size: 0.2 # Validation set size (fraction of the training set)
+num_workers: 2 # Number of workers for DataLoader
+augmentations: # Transformations to apply (added below in code)
+  - name: ToTensor
+  - name: Normalize
+    params:
+      mean: [0.5, 0.5, 0.5]
+      std: [0.5, 0.5, 0.5]
