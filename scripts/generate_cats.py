@@ -1,3 +1,5 @@
+# !pip install diffusers transformers torch tqdm sentencepiece accelerate ipywidgets
+# !huggingface-cli login
 from diffusers import AutoPipelineForImage2Image
 from diffusers.utils import load_image
 from diffusers import DiffusionPipeline, StableDiffusion3Pipeline
