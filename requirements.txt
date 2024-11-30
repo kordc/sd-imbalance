@@ -1,0 +1,8 @@
+torch
+torchvision
+tqdm
+hydra-core
+omegaconf
+numpy
+torchvision
+scikit-learn
