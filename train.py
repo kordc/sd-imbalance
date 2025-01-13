@@ -4,6 +4,7 @@ from omegaconf import DictConfig
 import hydra
 from data import CIFAR10DataModule
 from model import ResNet18Model
+import torch
 
 
 # Hydra Integration
@@ -11,6 +12,7 @@ from model import ResNet18Model
 def main(cfg: DictConfig):
     data_module = CIFAR10DataModule(cfg)
     model = ResNet18Model(cfg)
+    torch.set_float32_matmul_precision('high')
 
     logger = CSVLogger(save_dir="logs/", name="cifar10")
 

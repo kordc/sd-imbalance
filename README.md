@@ -18,5 +18,5 @@ python train.py
 
 To downsample the cats class to 10% of the original size, run the following command:
 ```sh
-python main.py downsample_class="cat" downsample_ratio=0.1 epochs=5
+python train.py downsample_class="cat" downsample_ratio=0.1 epochs=5
 ```
