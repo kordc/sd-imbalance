@@ -4,6 +4,7 @@ from torch.utils.data import random_split, DataLoader
 from torchvision import transforms
 import lightning as L
 from omegaconf import DictConfig
+from utils import CIFAR10_CLASSES
 
 
 class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
@@ -17,9 +18,11 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
     def _downsample(self):
         targets = np.array(self.targets)
         selected_idx = np.arange(len(targets))
-
+        if self.downsample_class is not None:
+            self.downsample_class = CIFAR10_CLASSES[self.downsample_class]
         # Check if the specified class exists in the dataset
         if self.downsample_class in targets:
+            print(f"Downsampling class {self.downsample_class}")
             # Get indices of all samples of the target class
             class_idx = selected_idx[targets == self.downsample_class]
             # Number of samples to keep for the target class
