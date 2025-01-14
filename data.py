@@ -7,6 +7,7 @@ from omegaconf import DictConfig
 from utils import CIFAR10_CLASSES
 from imblearn.over_sampling import RandomOverSampler, SMOTE, ADASYN
 from imblearn.under_sampling import RandomUnderSampler
+import torch
 
 
 class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
@@ -162,8 +163,7 @@ class CIFAR10DataModule(L.LightningDataModule):
     def prepare_data(self):
         torchvision.datasets.CIFAR10(root="./data", train=True, download=True)
         torchvision.datasets.CIFAR10(root="./data", train=False, download=True)
-
-    def setup(self, stage=None):
+        
         full_train_dataset = DownsampledCIFAR10(
             root="./data",
             train=True,
@@ -185,6 +185,12 @@ class CIFAR10DataModule(L.LightningDataModule):
         self.train_dataset, self.val_dataset = random_split(
             full_train_dataset, [train_size, val_size]
         )
+
+        self.class_weights = None
+        if self.cfg.class_weighting:
+            class_counts = torch.bincount(torch.tensor(self.train_dataset.targets))
+            class_weights = 1. / class_counts.float()
+            self.class_weights = class_weights / class_weights.sum()
 
     def train_dataloader(self):
         return DataLoader(

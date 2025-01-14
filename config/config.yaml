@@ -8,6 +8,8 @@ naive_oversample: false
 naive_undersample: false
 smote: false
 adasyn: false
+label_smoothing: false
+class_weighting: false
 name: basic_experiment
 epochs: 100
 batch_size: 128

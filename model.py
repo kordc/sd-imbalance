@@ -8,11 +8,20 @@ from utils import CIFAR10_CLASSES_REVERSE
 
 
 class ResNet18Model(L.LightningModule):
-    def __init__(self, cfg: DictConfig):
+    def __init__(self, cfg: DictConfig, class_weights=None):
         super().__init__()
         self.cfg = cfg
         self.model = torchvision.models.resnet18(num_classes=10)
         self.criterion = torch.nn.CrossEntropyLoss()
+        self.class_weights = class_weights
+
+        if self.class_weights is not None:
+            self.criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
+        else:
+            if cfg.label_smoothing:
+                self.criterion = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
+            else:
+                self.criterion = torch.nn.CrossEntropyLoss()
 
         # Define accuracy metric
         self.train_accuracy = Accuracy(num_classes=10, task="multiclass")
