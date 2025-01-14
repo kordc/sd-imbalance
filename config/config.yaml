@@ -2,7 +2,7 @@ hydra:
   job:
     chdir: True
     
-downsample_class: # Class to downsample, e.g., "cat"
+downsample_class: cat # Class to downsample, e.g., "cat"
 downsample_ratio: 0.01 # How many examples to keep
 name: basic_experiment
 epochs: 100

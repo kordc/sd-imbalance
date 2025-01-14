@@ -31,11 +31,10 @@ class ResNet18Model(L.LightningModule):
         outputs = self(inputs)
         loss = self.criterion(outputs, labels)
 
-        # Update accuracy
         preds = torch.argmax(outputs, dim=1)
         self.train_accuracy(preds, labels)
         balanced_acc = balanced_accuracy_score(labels.cpu().numpy(), preds.cpu().numpy())
-        self.log("train_balanced_accuracy", on_step=False, balanced_acc, on_epoch=True, prog_bar=True)
+        self.log("train_balanced_accuracy", balanced_acc, on_step=False, on_epoch=True, prog_bar=True)
         self.log("train_accuracy", self.train_accuracy, on_step=False, on_epoch=True, prog_bar=True)
         self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
@@ -45,12 +44,10 @@ class ResNet18Model(L.LightningModule):
         outputs = self(inputs)
         val_loss = self.criterion(outputs, labels)
 
-        # Update accuracy
         preds = torch.argmax(outputs, dim=1)
         self.val_accuracy(preds, labels)
         balanced_acc = balanced_accuracy_score(labels.cpu().numpy(), preds.cpu().numpy())
 
-        # Accumulate confusion matrix
         if self.val_confusion_matrix is None:
             self.val_confusion_matrix = confusion_matrix(labels.cpu(), preds.cpu(), labels=range(10))
         else:
@@ -65,21 +62,17 @@ class ResNet18Model(L.LightningModule):
         inputs, labels = batch
         outputs = self(inputs)
 
-        # Compute loss
         test_loss = self.criterion(outputs, labels)
 
-        # Compute accuracy and balanced accuracy
         preds = torch.argmax(outputs, dim=1)
         self.test_accuracy(preds, labels)
         balanced_acc = balanced_accuracy_score(labels.cpu().numpy(), preds.cpu().numpy())
 
-        # Accumulate confusion matrix
         if self.test_confusion_matrix is None:
             self.test_confusion_matrix = confusion_matrix(labels.cpu(), preds.cpu(), labels=range(10))
         else:
             self.test_confusion_matrix += confusion_matrix(labels.cpu(), preds.cpu(), labels=range(10))
 
-        # Log metrics
         self.log("test_balanced_accuracy", balanced_acc, on_step=False, on_epoch=True, prog_bar=True)
         self.log("test_accuracy", self.test_accuracy, on_step=False, on_epoch=True, prog_bar=True)
         self.log("test_loss", test_loss, on_step=False, on_epoch=True, prog_bar=False)
@@ -89,26 +82,22 @@ class ResNet18Model(L.LightningModule):
         self.train_accuracy.reset()
 
     def on_validation_epoch_end(self):
-        # Compute per-class accuracy
         if self.val_confusion_matrix is not None:
             per_class_accuracy = self.val_confusion_matrix.diagonal() / self.val_confusion_matrix.sum(axis=1)
             for class_idx, accuracy in enumerate(per_class_accuracy):
                 class_name = CIFAR10_CLASSES_REVERSE[class_idx]
                 self.log(f"val_accuracy_{class_name}", accuracy, on_step=False, on_epoch=True, prog_bar=True)
 
-        # Reset metrics
         self.val_accuracy.reset()
         self.val_confusion_matrix = None
 
     def on_test_epoch_end(self):
-        # Compute per-class accuracy
         if self.test_confusion_matrix is not None:
             per_class_accuracy = self.test_confusion_matrix.diagonal() / self.test_confusion_matrix.sum(axis=1)
             for class_idx, accuracy in enumerate(per_class_accuracy):
                 class_name = CIFAR10_CLASSES_REVERSE[class_idx]
                 self.log(f"test_accuracy_{class_name}", accuracy, on_step=False, on_epoch=True, prog_bar=True)
 
-        # Reset metrics
         self.test_accuracy.reset()
         self.test_confusion_matrix = None
 

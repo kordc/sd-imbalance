@@ -3,8 +3,8 @@ import wandb
 from lightning.pytorch.loggers import CSVLogger, WandbLogger
 from omegaconf import DictConfig
 import hydra
-from data import CIFAR10DataModule  # Assuming CIFAR10DataModule is implemented in `data.py`
-from model import ResNet18Model  # Assuming ResNet18Model is implemented in `model.py`
+from data import CIFAR10DataModule
+from model import ResNet18Model
 import torch
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -23,7 +23,7 @@ def main(cfg: DictConfig):
 
     csv_logger = CSVLogger(save_dir="logs/", name="cifar10")
     config_dict = OmegaConf.to_container(cfg, resolve=True)
-    wandb_logger = WandbLogger(project="cifar10_project", log_model="all")  # Initialize WandB logger
+    wandb_logger = WandbLogger(project="cifar10_project", log_model="all")
     wandb.init(config=config_dict, project="cifar10_project", name=cfg.name)
 
     trainer = L.Trainer(
@@ -36,8 +36,6 @@ def main(cfg: DictConfig):
 
     trainer.fit(model, datamodule=data_module)
     trainer.test(model, datamodule=data_module)
-
-    plot_metrics(logger.log_dir)
 
 
 if __name__ == "__main__":
