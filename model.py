@@ -33,9 +33,23 @@ class ResNet18Model(L.LightningModule):
 
         preds = torch.argmax(outputs, dim=1)
         self.train_accuracy(preds, labels)
-        balanced_acc = balanced_accuracy_score(labels.cpu().numpy(), preds.cpu().numpy())
-        self.log("train_balanced_accuracy", balanced_acc, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("train_accuracy", self.train_accuracy, on_step=False, on_epoch=True, prog_bar=True)
+        balanced_acc = balanced_accuracy_score(
+            labels.cpu().numpy(), preds.cpu().numpy()
+        )
+        self.log(
+            "train_balanced_accuracy",
+            balanced_acc,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+        )
+        self.log(
+            "train_accuracy",
+            self.train_accuracy,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+        )
         self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
@@ -46,15 +60,33 @@ class ResNet18Model(L.LightningModule):
 
         preds = torch.argmax(outputs, dim=1)
         self.val_accuracy(preds, labels)
-        balanced_acc = balanced_accuracy_score(labels.cpu().numpy(), preds.cpu().numpy())
+        balanced_acc = balanced_accuracy_score(
+            labels.cpu().numpy(), preds.cpu().numpy()
+        )
 
         if self.val_confusion_matrix is None:
-            self.val_confusion_matrix = confusion_matrix(labels.cpu(), preds.cpu(), labels=range(10))
+            self.val_confusion_matrix = confusion_matrix(
+                labels.cpu(), preds.cpu(), labels=range(10)
+            )
         else:
-            self.val_confusion_matrix += confusion_matrix(labels.cpu(), preds.cpu(), labels=range(10))
+            self.val_confusion_matrix += confusion_matrix(
+                labels.cpu(), preds.cpu(), labels=range(10)
+            )
 
-        self.log("val_balanced_accuracy", balanced_acc, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("val_accuracy", self.val_accuracy, on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            "val_balanced_accuracy",
+            balanced_acc,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+        )
+        self.log(
+            "val_accuracy",
+            self.val_accuracy,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+        )
         self.log("val_loss", val_loss, on_step=False, on_epoch=True, prog_bar=True)
         return {"val_loss": val_loss}
 
@@ -66,15 +98,33 @@ class ResNet18Model(L.LightningModule):
 
         preds = torch.argmax(outputs, dim=1)
         self.test_accuracy(preds, labels)
-        balanced_acc = balanced_accuracy_score(labels.cpu().numpy(), preds.cpu().numpy())
+        balanced_acc = balanced_accuracy_score(
+            labels.cpu().numpy(), preds.cpu().numpy()
+        )
 
         if self.test_confusion_matrix is None:
-            self.test_confusion_matrix = confusion_matrix(labels.cpu(), preds.cpu(), labels=range(10))
+            self.test_confusion_matrix = confusion_matrix(
+                labels.cpu(), preds.cpu(), labels=range(10)
+            )
         else:
-            self.test_confusion_matrix += confusion_matrix(labels.cpu(), preds.cpu(), labels=range(10))
+            self.test_confusion_matrix += confusion_matrix(
+                labels.cpu(), preds.cpu(), labels=range(10)
+            )
 
-        self.log("test_balanced_accuracy", balanced_acc, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("test_accuracy", self.test_accuracy, on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            "test_balanced_accuracy",
+            balanced_acc,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+        )
+        self.log(
+            "test_accuracy",
+            self.test_accuracy,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+        )
         self.log("test_loss", test_loss, on_step=False, on_epoch=True, prog_bar=False)
         return {"test_loss": test_loss}
 
@@ -83,25 +133,50 @@ class ResNet18Model(L.LightningModule):
 
     def on_validation_epoch_end(self):
         if self.val_confusion_matrix is not None:
-            per_class_accuracy = self.val_confusion_matrix.diagonal() / self.val_confusion_matrix.sum(axis=1)
+            per_class_accuracy = (
+                self.val_confusion_matrix.diagonal()
+                / self.val_confusion_matrix.sum(axis=1)
+            )
             for class_idx, accuracy in enumerate(per_class_accuracy):
                 class_name = CIFAR10_CLASSES_REVERSE[class_idx]
-                self.log(f"val_accuracy_{class_name}", accuracy, on_step=False, on_epoch=True, prog_bar=True)
+                self.log(
+                    f"val_accuracy_{class_name}",
+                    accuracy,
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=True,
+                )
 
         self.val_accuracy.reset()
         self.val_confusion_matrix = None
 
     def on_test_epoch_end(self):
         if self.test_confusion_matrix is not None:
-            per_class_accuracy = self.test_confusion_matrix.diagonal() / self.test_confusion_matrix.sum(axis=1)
+            per_class_accuracy = (
+                self.test_confusion_matrix.diagonal()
+                / self.test_confusion_matrix.sum(axis=1)
+            )
             for class_idx, accuracy in enumerate(per_class_accuracy):
                 class_name = CIFAR10_CLASSES_REVERSE[class_idx]
-                self.log(f"test_accuracy_{class_name}", accuracy, on_step=False, on_epoch=True, prog_bar=True)
+                self.log(
+                    f"test_accuracy_{class_name}",
+                    accuracy,
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=True,
+                )
 
         self.test_accuracy.reset()
         self.test_confusion_matrix = None
 
     def configure_optimizers(self):
-        optimizer = torch.optim.SGD(self.parameters(), lr=self.cfg.learning_rate, momentum=0.9, weight_decay=5e-4)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.cfg.epochs)
+        optimizer = torch.optim.SGD(
+            self.parameters(),
+            lr=self.cfg.learning_rate,
+            momentum=0.9,
+            weight_decay=5e-4,
+        )
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=self.cfg.epochs
+        )
         return [optimizer], [scheduler]

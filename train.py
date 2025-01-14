@@ -19,7 +19,7 @@ def main(cfg: DictConfig):
     model = ResNet18Model(cfg)
     if torch.__version__ >= "2.0.0":
         model = torch.compile(model)
-    torch.set_float32_matmul_precision('medium')
+    torch.set_float32_matmul_precision("medium")
 
     csv_logger = CSVLogger(save_dir="logs/", name="cifar10")
     config_dict = OmegaConf.to_container(cfg, resolve=True)
@@ -27,10 +27,10 @@ def main(cfg: DictConfig):
     wandb.init(config=config_dict, project="cifar10_project", name=cfg.name)
 
     trainer = L.Trainer(
-        max_epochs=cfg.epochs, 
-        accelerator="auto", 
-        devices="auto", 
-        logger=[csv_logger, wandb_logger], 
+        max_epochs=cfg.epochs,
+        accelerator="auto",
+        devices="auto",
+        logger=[csv_logger, wandb_logger],
         log_every_n_steps=1,
     )
 

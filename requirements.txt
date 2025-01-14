@@ -8,4 +8,5 @@ torchvision
 scikit-learn
 lightning
 wandb
-pip install imbalanced-learn
+imbalanced-learn
+ruff
