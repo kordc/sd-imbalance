@@ -2,11 +2,9 @@ import numpy as np
 import torchvision
 from torch.utils.data import random_split, DataLoader
 from torchvision import transforms
-from torchvision.transforms import InterpolationMode
 import lightning as L
 from omegaconf import DictConfig
 from utils import CIFAR10_CLASSES
-import os
 from imblearn.over_sampling import RandomOverSampler, SMOTE, ADASYN
 from imblearn.under_sampling import RandomUnderSampler
 

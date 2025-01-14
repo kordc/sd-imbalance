@@ -1,8 +1,6 @@
 # !pip install diffusers transformers torch tqdm sentencepiece accelerate ipywidgets
 # !huggingface-cli login
-from diffusers import AutoPipelineForImage2Image
-from diffusers.utils import load_image
-from diffusers import DiffusionPipeline, StableDiffusion3Pipeline
+from diffusers import StableDiffusion3Pipeline
 import torch
 import os
 from tqdm import tqdm
@@ -390,8 +388,6 @@ if __name__ == "__main__":
     print(
         f"Objects: {len(set(list(itertools.chain.from_iterable(furniture_or_outdoor.values()))))}"
     )
-
-    from diffusers import FluxPipeline
 
     pipe = StableDiffusion3Pipeline.from_pretrained(
         "stabilityai/stable-diffusion-3.5-large-turbo", torch_dtype=torch.bfloat16

@@ -1,19 +1,17 @@
 # !pip install diffusers transformers torch tqdm sentencepiece accelerate ipywidgets
 # !huggingface-cli login
-from diffusers import AutoPipelineForImage2Image
-from diffusers.utils import load_image
-from diffusers import DiffusionPipeline, StableDiffusion3Pipeline
+from diffusers import StableDiffusion3Pipeline
 import torch
+import os
+from tqdm import tqdm
+import random
+import itertools
 
 # pipe = DiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0", torch_dtype=torch.float16, use_safetensors=True, variant="fp16")
 pipe = StableDiffusion3Pipeline.from_pretrained(
     "stabilityai/stable-diffusion-3.5-large-turbo", torch_dtype=torch.bfloat16
 )
 pipe = pipe.to("cuda")
-
-import os
-from tqdm import tqdm
-import random
 
 # Expanded list of cat breeds
 cat_breeds = [
@@ -321,7 +319,6 @@ furniture_or_outdoor = {
     ],
 }
 print(f"Prepositions: {len(furniture_or_outdoor)}")
-import itertools
 
 print(
     f"Objects: {len(set(list(itertools.chain.from_iterable(furniture_or_outdoor.values()))))}"

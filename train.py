@@ -6,10 +6,7 @@ import hydra
 from data import CIFAR10DataModule
 from model import ResNet18Model
 import torch
-import pandas as pd
-import matplotlib.pyplot as plt
-from utils import plot_metrics
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 
 
 @hydra.main(config_path="config", config_name="config", version_base="1.2")

@@ -4,7 +4,6 @@ import lightning as L
 from omegaconf import DictConfig
 from torchmetrics import Accuracy
 from sklearn.metrics import balanced_accuracy_score, confusion_matrix
-import numpy as np
 from utils import CIFAR10_CLASSES_REVERSE
 
 
