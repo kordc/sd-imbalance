@@ -46,6 +46,7 @@ class CIFAR10DataModule(L.LightningDataModule):
         super().__init__()
         self.cfg = cfg
         self.transform = self.get_augmentations(cfg.augmentations)
+        self.test_transform = self.get_augmentations(cfg.test_augmentations)
         self.train_dataset = None
         self.val_dataset = None
         self.test_dataset = None
@@ -71,7 +72,7 @@ class CIFAR10DataModule(L.LightningDataModule):
             downsample_ratio=self.cfg.downsample_ratio,
         )
         self.test_dataset = torchvision.datasets.CIFAR10(
-            root="./data", train=False, transform=self.transform
+            root="./data", train=False, transform=self.test_transform
         )
 
         val_size = int(self.cfg.val_size * len(full_train_dataset))
