@@ -3,8 +3,9 @@ torchvision
 tqdm
 hydra-core
 omegaconf
-numpy
+numpy<2
 torchvision
 scikit-learn
 lightning
 wandb
+pip install imbalanced-learn

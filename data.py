@@ -2,17 +2,26 @@ import numpy as np
 import torchvision
 from torch.utils.data import random_split, DataLoader
 from torchvision import transforms
+from torchvision.transforms import InterpolationMode
 import lightning as L
 from omegaconf import DictConfig
 from utils import CIFAR10_CLASSES
 import os
+from imblearn.over_sampling import RandomOverSampler, SMOTE, ADASYN
+from imblearn.under_sampling import RandomUnderSampler
 
 
 class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
-    def __init__(self, root, train=True, transform=None, download=False, downsample_class=None, downsample_ratio=1.0):
+    def __init__(self, root, train=True, transform=None, download=False, downsample_class=None, 
+                 downsample_ratio=1.0, naive_oversample=False, naive_undersample=False, smote=False, adasyn=False, random_state=42):
         super().__init__(root=root, train=train, transform=transform, download=download)
         self.downsample_class = downsample_class
         self.downsample_ratio = downsample_ratio
+        self.naive_oversample = naive_oversample
+        self.naive_undersample = naive_undersample
+        self.smote = smote
+        self.adasyn = adasyn
+        self.random_state = random_state
         if downsample_class is not None:
             self._downsample()
 
@@ -29,17 +38,66 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
             # Number of samples to keep for the target class
             keep_size = int(len(class_idx) * self.downsample_ratio)
             # Randomly sample indices to keep
-            keep_idx = np.random.choice(
-                class_idx, size=keep_size, replace=False)
+            keep_idx = np.random.choice(class_idx, size=keep_size, replace=False)
             # Combine with indices of all other classes
             non_class_idx = selected_idx[targets != self.downsample_class]
             final_idx = np.concatenate([non_class_idx, keep_idx])
             # Update the dataset
             self.data = self.data[final_idx]
             self.targets = list(targets[final_idx])
+
+            if self.naive_oversample: #TODO: Add only one possible option, refactor this code and config
+                print(f"Naive oversampling class {self.downsample_class} to original size using RandomOverSampler.")
+                ros = RandomOverSampler(sampling_strategy='auto', random_state=42)
+                # Reshape data and targets for use with imbalanced-learn
+                data_reshaped = self.data.reshape(self.data.shape[0], -1)  # Flatten images
+                oversampled_data, oversampled_targets = ros.fit_resample(data_reshaped, self.targets)
+                
+                # Reshape oversampled data back to image dimensions (e.g., 32x32x3)
+                oversampled_data = oversampled_data.reshape(-1, 32, 32, 3)
+                self.data = oversampled_data
+                self.targets = list(oversampled_targets)
+
+            if self.naive_undersample:
+                print(f"Naive undersampling all classes to match the size of downsampled class {self.downsample_class}.")
+                
+                # Calculate the target number of samples (size of downsampled class)
+                target_size = keep_size  # Size of downsampled class
+                
+                rus = RandomUnderSampler(sampling_strategy={i: target_size for i in range(10)}, random_state=self.random_state)
+                # Reshape data and targets for use with imbalanced-learn
+                data_reshaped = self.data.reshape(self.data.shape[0], -1)  # Flatten images
+                undersampled_data, undersampled_targets = rus.fit_resample(data_reshaped, self.targets)
+                
+                # Reshape undersampled data back to image dimensions (e.g., 32x32x3)
+                undersampled_data = undersampled_data.reshape(-1, 32, 32, 3)
+                self.data = undersampled_data
+                self.targets = list(undersampled_targets)
+
+            if self.smote:
+                print(f"Applying SMOTE for oversampling class {self.downsample_class}.")
+                smote = SMOTE(sampling_strategy='auto', random_state=self.random_state)
+                data_reshaped = self.data.reshape(self.data.shape[0], -1)  # Flatten images
+                smote_data, smote_targets = smote.fit_resample(data_reshaped, self.targets)
+                
+                # Reshape SMOTE data back to image dimensions (e.g., 32x32x3)
+                smote_data = smote_data.reshape(-1, 32, 32, 3)
+                self.data = smote_data
+                self.targets = list(smote_targets)
+
+            # Apply ADASYN if enabled
+            if self.adasyn:
+                print(f"Applying ADASYN for oversampling class {self.downsample_class}.")
+                adasyn = ADASYN(sampling_strategy='auto', random_state=self.random_state)
+                data_reshaped = self.data.reshape(self.data.shape[0], -1)  # Flatten images
+                adasyn_data, adasyn_targets = adasyn.fit_resample(data_reshaped, self.targets)
+                
+                # Reshape ADASYN data back to image dimensions (e.g., 32x32x3)
+                adasyn_data = adasyn_data.reshape(-1, 32, 32, 3)
+                self.data = adasyn_data
+                self.targets = list(adasyn_targets)
         else:
-            print(
-                f"Class {self.downsample_class} not found in the dataset. Skipping downsampling.")
+            print(f"Class {self.downsample_class} not found in the dataset. Skipping downsampling.")
 
 class CIFAR10DataModule(L.LightningDataModule):
     def __init__(self, cfg: DictConfig):
@@ -70,6 +128,11 @@ class CIFAR10DataModule(L.LightningDataModule):
             transform=self.transform,
             downsample_class=self.cfg.downsample_class,
             downsample_ratio=self.cfg.downsample_ratio,
+            naive_oversample=self.cfg.naive_oversample,
+            naive_undersample=self.cfg.naive_undersample,
+            smote=self.cfg.smote,
+            adasyn=self.cfg.adasyn, 
+            random_state=self.cfg.seed
         )
         self.test_dataset = torchvision.datasets.CIFAR10(
             root="./data", train=False, transform=self.test_transform

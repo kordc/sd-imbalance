@@ -1,9 +1,13 @@
 hydra:
   job:
     chdir: True
-    
-downsample_class: cat # Class to downsample, e.g., "cat"
+
+downsample_class: # Class to downsample, e.g., "cat"
 downsample_ratio: 0.01 # How many examples to keep
+naive_oversample: false
+naive_undersample: false
+smote: false
+adasyn: false
 name: basic_experiment
 epochs: 100
 batch_size: 128
@@ -24,6 +28,23 @@ augmentations:
     - name: RandomHorizontalFlip
       params:
           p: 0.5
+    # - name: ColorJitter
+    #   params:
+    #       brightness: 0.5
+    #       hue: 0.3
+    # - name: RandomPerspective
+    #   params:
+    #       distortion_scale: 0.2
+    #       p: 1.0
+    #       fill: 0
+    # - name: RandomRotation
+    #   params:
+    #       degrees: 180
+    #       fill: 0
+    # - name: RandomSolarize
+    #   params:
+    #       threshold: 0.75
+    #       p: 0.5
 test_augmentations:
     - name: ToTensor
     - name: Normalize
