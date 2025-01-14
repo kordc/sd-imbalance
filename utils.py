@@ -3,6 +3,7 @@ import numpy as np
 from sklearn.metrics import balanced_accuracy_score
 import pandas as pd
 import matplotlib.pyplot as plt
+import wandb
 
 CIFAR10_CLASSES = {
     'airplane': 0,
@@ -16,7 +17,7 @@ CIFAR10_CLASSES = {
     'ship': 8,
     'truck': 9
 }
-
+CIFAR10_CLASSES_REVERSE = {v: k for k, v in CIFAR10_CLASSES.items()}
 
 def evaluate_model(model, dataloader, device):
     model.eval()
@@ -44,10 +45,10 @@ def plot_metrics(log_dir):
     plt.figure(figsize=(12, 6))
 
     # Training and validation accuracy
-    if 'train_accuracy_epoch' in metrics and 'val_accuracy' in metrics:
+    if 'train_accuracy_epoch' in metrics.columns and 'val_accuracy' in metrics.columns:
         plt.subplot(1, 2, 1)
-        plt.plot(metrics['epoch'], metrics['train_accuracy_epoch'], label='Train Accuracy', marker='o')
-        plt.plot(metrics['epoch'], metrics['val_accuracy'], label='Validation Accuracy', marker='o')
+        plt.plot(metrics['epoch'], metrics['train_accuracy_epoch'], label='Train Accuracy', marker='o', linestyle='-')
+        plt.plot(metrics['epoch'], metrics['val_accuracy'], label='Validation Accuracy', marker='o', linestyle='-')
         plt.xlabel('Epoch')
         plt.ylabel('Accuracy')
         plt.title('Train vs Validation Accuracy')
@@ -55,10 +56,10 @@ def plot_metrics(log_dir):
         plt.grid()
 
     # Training and validation loss
-    if 'train_loss_epoch' in metrics and 'val_loss' in metrics:
+    if 'train_loss_epoch' in metrics.columns and 'val_loss' in metrics.columns:
         plt.subplot(1, 2, 2)
-        plt.plot(metrics['epoch'], metrics['train_loss_epoch'], label='Train Loss', marker='o')
-        plt.plot(metrics['epoch'], metrics['val_loss'], label='Validation Loss', marker='o')
+        plt.plot(metrics['epoch'], metrics['train_loss_epoch'], label='Train Loss', marker='o', linestyle='-')
+        plt.plot(metrics['epoch'], metrics['val_loss'], label='Validation Loss', marker='o', linestyle='-')
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
         plt.title('Train vs Validation Loss')
@@ -66,4 +67,5 @@ def plot_metrics(log_dir):
         plt.grid()
 
     plt.tight_layout()
-    plt.show()
+    plt.savefig('train_plot.png')
+    plt.close()

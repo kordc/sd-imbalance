@@ -1,5 +1,6 @@
 import lightning as L
-from lightning.pytorch.loggers import CSVLogger
+import wandb
+from lightning.pytorch.loggers import CSVLogger, WandbLogger
 from omegaconf import DictConfig
 import hydra
 from data import CIFAR10DataModule  # Assuming CIFAR10DataModule is implemented in `data.py`
@@ -8,33 +9,34 @@ import torch
 import pandas as pd
 import matplotlib.pyplot as plt
 from utils import plot_metrics
+from omegaconf import DictConfig, OmegaConf
 
 
-# Hydra Integration
-@hydra.main(config_path="config", config_name="config")
+@hydra.main(config_path="config", config_name="config", version_base="1.2")
 def main(cfg: DictConfig):
-    # Initialize data module and model
+    L.seed_everything(cfg.seed, workers=True)
     data_module = CIFAR10DataModule(cfg)
     model = ResNet18Model(cfg)
-    torch.set_float32_matmul_precision('high')
+    if torch.__version__ >= "2.0.0":
+        model = torch.compile(model)
+    torch.set_float32_matmul_precision('medium')
 
-    # Set up CSV logger
-    logger = CSVLogger(save_dir="logs/", name="cifar10")
+    csv_logger = CSVLogger(save_dir="logs/", name="cifar10")
+    config_dict = OmegaConf.to_container(cfg, resolve=True)
+    wandb_logger = WandbLogger(project="cifar10_project", log_model="all")  # Initialize WandB logger
+    wandb.init(config=config_dict, project="cifar10_project")
 
-    # Set up trainer
     trainer = L.Trainer(
         max_epochs=cfg.epochs, 
         accelerator="auto", 
         devices="auto", 
-        logger=logger, 
+        logger=[csv_logger, wandb_logger], 
         log_every_n_steps=1,
     )
 
-    # Train and test the model
     trainer.fit(model, datamodule=data_module)
     trainer.test(model, datamodule=data_module)
 
-    # Plot metrics
     plot_metrics(logger.log_dir)
 
 

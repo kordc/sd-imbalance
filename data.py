@@ -5,6 +5,7 @@ from torchvision import transforms
 import lightning as L
 from omegaconf import DictConfig
 from utils import CIFAR10_CLASSES
+import os
 
 
 class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
@@ -20,7 +21,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         selected_idx = np.arange(len(targets))
         if self.downsample_class is not None:
             self.downsample_class = CIFAR10_CLASSES[self.downsample_class]
-        # Check if the specified class exists in the dataset
+
         if self.downsample_class in targets:
             print(f"Downsampling class {self.downsample_class}")
             # Get indices of all samples of the target class
@@ -58,8 +59,8 @@ class CIFAR10DataModule(L.LightningDataModule):
         return transforms.Compose(transform_list)
 
     def prepare_data(self):
-        DownsampledCIFAR10(root="./data", train=True, download=True)
-        torchvision.datasets.CIFAR10(root="./data", train=False, download=True)
+        torchvision.datasets.CIFAR10(root='./data', train=True, download=True)
+        torchvision.datasets.CIFAR10(root='./data', train=False, download=True)
 
     def setup(self, stage=None):
         full_train_dataset = DownsampledCIFAR10(

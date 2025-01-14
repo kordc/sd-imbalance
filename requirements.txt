@@ -6,5 +6,5 @@ omegaconf
 numpy
 torchvision
 scikit-learn
-dvc[gdrive]
 lightning
+wandb
