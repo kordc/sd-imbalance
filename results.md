@@ -1,3 +1,6 @@
+# Results
+
+## Trainings and evaluations
 | Method Name                          | Test Accuracy | Test Balanced Accuracy | Airplane | Automobile | Bird  | Cat   | Deer  | Dog   | Frog  | Horse | Ship  | Truck |
 |--------------------------------------|---------------|-------------------------|----------|------------|-------|-------|-------|-------|-------|-------|-------|-------|
 | Full data + more augmentations      | 0.105         | 0.105                   | 0.904    | 0.000      | 0.022 | 0.006 | 0.004 | 0.016 | 0.003 | 0.065 | 0.022 | 0.010 |
@@ -12,43 +15,23 @@
 | Downsampled + ADASYN     | 0.813         | 0.812                   | 0.920    | 0.922      | 0.851 | 0.012 | 0.885 | 0.865 | 0.921 | 0.914 | 0.922 | 0.917 |
 | Full data                           | 0.855         | 0.853                   | 0.870    | 0.921      | 0.820 | 0.707 | 0.865 | 0.778 | 0.897 | 0.868 | 0.924 | 0.904 |
 
-Notatki:
+## Data generation
+1. Prompt
+```py
+f"{angle} of a {breed} cat {preposition} the {furniture}, {gaze}. The cat has realistic fur textures, intricate details, and sharp features, with soft lighting and a clear focus. The image has a shallow depth of field, emphasizing the cat in fine detail. 8k, cinematic, photorealistic"
+```
+- Cat breeds: 100 (np British Longhair)
+- Prepositions: 6 (np on)
+- Objects: 61 (np sofa)
+- camera_angles: 5 (np a photo taken from above”)
+- gaze_directions: 12 (np looking up)
+- Użyty BeautifulPrompt (BeautifulPrompt: Towards Automatic Prompt Engineering for Text-to-Image Synthesis)
+- Przykład: a photo taken from behind of a American Wirehair cat next to the cabinet, looking to the right. The cat has realistic fur textures, intricate details, and sharp features, with soft lighting and a clear focus. The image has a shallow depth of field, emphasizing the cat in fine detail. 8k, cinematic, photorealistic
 
-1. Pure training config (ResNet18):
-    downsample_class: # Class to downsample, e.g., "cat"
-    downsample_ratio: 0.01 # How many examples to keep
-    name: basic_experiment
-    epochs: 100
-    batch_size: 128
-    learning_rate: 0.1
-    val_size: 0.2
-    num_workers: 2
-    seed: 42
-    augmentations:
-        - name: ToTensor
-        - name: Normalize
-          params:
-              mean: [0.485, 0.456, 0.406]
-              std: [0.229, 0.224, 0.225]
-        - name: RandomCrop
-          params:
-              size: 32
-              padding: 4
-        - name: RandomHorizontalFlip
-          params:
-              p: 0.5
-    test_augmentations:
-        - name: ToTensor
-        - name: Normalize
-          params:
-              mean: [0.485, 0.456, 0.406]
-              std: [0.229, 0.224, 0.225]
-2. Oba ustawienia many augmentations - 100 epok to SPORO za krótko, słaby wynik jest tylko dlatego, że ta augmentacja jest trudna i wymaga więcej epok, można kiedyś powtórzyć eksperyment na 200 epok.
+2. Wybrane modele do ewaluacji:
+- stable-diffusion-3.5-large-turbo - 1.5h na 6k zdjęć
+- black-forest-labs/FLUX.1-schnell - 2.5h na 6k zdjęć
+- black-forest-labs/FLUX.1-dev - 14.5h na 6k zdjęć
 
-8.   0.01 Cat + label smoothing
-9.  0.01 Cat + hierarchicla clustering
-10.   0.01 Cat + class weightinh (loss)
-13.  0.01 Cat + FLUX.1-dev
-14.   0.01 Cat + FLUX.1-schnell
-15.    0.01 Cat + SD-3.5 Large Turbo
-16. 0.01 Cat + SD-3.5 Large
+
+Wszystko liczone jest na maszynie Lambda z NVIDIA A100, 40GB RAM, 8vCPU, 1TB SSD, 1Gbps
