@@ -163,7 +163,7 @@ class CIFAR10DataModule(L.LightningDataModule):
     def prepare_data(self):
         torchvision.datasets.CIFAR10(root="./data", train=True, download=True)
         torchvision.datasets.CIFAR10(root="./data", train=False, download=True)
-        
+
         full_train_dataset = DownsampledCIFAR10(
             root="./data",
             train=True,
@@ -186,11 +186,13 @@ class CIFAR10DataModule(L.LightningDataModule):
             full_train_dataset, [train_size, val_size]
         )
 
-        train_targets = torch.tensor([full_train_dataset.targets[i] for i in self.train_dataset.indices])
+        train_targets = torch.tensor(
+            [full_train_dataset.targets[i] for i in self.train_dataset.indices]
+        )
 
         # Calculate class counts and class weights based on the train dataset
         class_counts = torch.bincount(train_targets)
-        class_weights = 1. / class_counts.float()
+        class_weights = 1.0 / class_counts.float()
         self.class_weights = class_weights / class_weights.sum()
 
     def train_dataloader(self):
