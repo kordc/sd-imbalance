@@ -186,11 +186,12 @@ class CIFAR10DataModule(L.LightningDataModule):
             full_train_dataset, [train_size, val_size]
         )
 
-        self.class_weights = None
-        if self.cfg.class_weighting:
-            class_counts = torch.bincount(torch.tensor(self.train_dataset.targets))
-            class_weights = 1. / class_counts.float()
-            self.class_weights = class_weights / class_weights.sum()
+        train_targets = torch.tensor([full_train_dataset.targets[i] for i in self.train_dataset.indices])
+
+        # Calculate class counts and class weights based on the train dataset
+        class_counts = torch.bincount(train_targets)
+        class_weights = 1. / class_counts.float()
+        self.class_weights = class_weights / class_weights.sum()
 
     def train_dataloader(self):
         return DataLoader(
