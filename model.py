@@ -1,9 +1,10 @@
+import lightning as L
 import torch
 import torchvision
-import lightning as L
 from omegaconf import DictConfig
-from torchmetrics import Accuracy
 from sklearn.metrics import balanced_accuracy_score, confusion_matrix
+from torchmetrics import Accuracy
+
 from utils import CIFAR10_CLASSES_REVERSE
 
 
@@ -17,11 +18,10 @@ class ResNet18Model(L.LightningModule):
 
         if self.class_weights is not None:
             self.criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
+        elif cfg.label_smoothing:
+            self.criterion = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
         else:
-            if cfg.label_smoothing:
-                self.criterion = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
-            else:
-                self.criterion = torch.nn.CrossEntropyLoss()
+            self.criterion = torch.nn.CrossEntropyLoss()
 
         # Define accuracy metric
         self.train_accuracy = Accuracy(num_classes=10, task="multiclass")
@@ -42,7 +42,8 @@ class ResNet18Model(L.LightningModule):
         preds = torch.argmax(outputs, dim=1)
         self.train_accuracy(preds, labels)
         balanced_acc = balanced_accuracy_score(
-            labels.cpu().numpy(), preds.cpu().numpy()
+            labels.cpu().numpy(),
+            preds.cpu().numpy(),
         )
         self.log(
             "train_balanced_accuracy",
@@ -69,16 +70,21 @@ class ResNet18Model(L.LightningModule):
         preds = torch.argmax(outputs, dim=1)
         self.val_accuracy(preds, labels)
         balanced_acc = balanced_accuracy_score(
-            labels.cpu().numpy(), preds.cpu().numpy()
+            labels.cpu().numpy(),
+            preds.cpu().numpy(),
         )
 
         if self.val_confusion_matrix is None:
             self.val_confusion_matrix = confusion_matrix(
-                labels.cpu(), preds.cpu(), labels=range(10)
+                labels.cpu(),
+                preds.cpu(),
+                labels=range(10),
             )
         else:
             self.val_confusion_matrix += confusion_matrix(
-                labels.cpu(), preds.cpu(), labels=range(10)
+                labels.cpu(),
+                preds.cpu(),
+                labels=range(10),
             )
 
         self.log(
@@ -107,16 +113,21 @@ class ResNet18Model(L.LightningModule):
         preds = torch.argmax(outputs, dim=1)
         self.test_accuracy(preds, labels)
         balanced_acc = balanced_accuracy_score(
-            labels.cpu().numpy(), preds.cpu().numpy()
+            labels.cpu().numpy(),
+            preds.cpu().numpy(),
         )
 
         if self.test_confusion_matrix is None:
             self.test_confusion_matrix = confusion_matrix(
-                labels.cpu(), preds.cpu(), labels=range(10)
+                labels.cpu(),
+                preds.cpu(),
+                labels=range(10),
             )
         else:
             self.test_confusion_matrix += confusion_matrix(
-                labels.cpu(), preds.cpu(), labels=range(10)
+                labels.cpu(),
+                preds.cpu(),
+                labels=range(10),
             )
 
         self.log(
@@ -185,6 +196,7 @@ class ResNet18Model(L.LightningModule):
             weight_decay=5e-4,
         )
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=self.cfg.epochs
+            optimizer,
+            T_max=self.cfg.epochs,
         )
         return [optimizer], [scheduler]

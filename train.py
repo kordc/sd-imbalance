@@ -1,12 +1,12 @@
+import hydra
 import lightning as L
+import torch
 import wandb
 from lightning.pytorch.loggers import CSVLogger, WandbLogger
-from omegaconf import DictConfig
-import hydra
+from omegaconf import DictConfig, OmegaConf
+
 from data import CIFAR10DataModule
 from model import ResNet18Model
-import torch
-from omegaconf import OmegaConf
 
 
 @hydra.main(config_path="config", config_name="config", version_base="1.2")

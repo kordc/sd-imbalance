@@ -1,13 +1,14 @@
-import numpy as np
-import torchvision
-from torch.utils.data import random_split, DataLoader
-from torchvision import transforms
 import lightning as L
-from omegaconf import DictConfig
-from utils import CIFAR10_CLASSES
-from imblearn.over_sampling import RandomOverSampler, SMOTE, ADASYN
-from imblearn.under_sampling import RandomUnderSampler
+import numpy as np
 import torch
+import torchvision
+from imblearn.over_sampling import ADASYN, SMOTE, RandomOverSampler
+from imblearn.under_sampling import RandomUnderSampler
+from omegaconf import DictConfig
+from torch.utils.data import DataLoader, random_split
+from torchvision import transforms
+
+from utils import CIFAR10_CLASSES
 
 
 class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
@@ -61,15 +62,17 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 self.naive_oversample
             ):  # TODO: Add only one possible option, refactor this code and config
                 print(
-                    f"Naive oversampling class {self.downsample_class} to original size using RandomOverSampler."
+                    f"Naive oversampling class {self.downsample_class} to original size using RandomOverSampler.",
                 )
                 ros = RandomOverSampler(sampling_strategy="auto", random_state=42)
                 # Reshape data and targets for use with imbalanced-learn
                 data_reshaped = self.data.reshape(
-                    self.data.shape[0], -1
+                    self.data.shape[0],
+                    -1,
                 )  # Flatten images
                 oversampled_data, oversampled_targets = ros.fit_resample(
-                    data_reshaped, self.targets
+                    data_reshaped,
+                    self.targets,
                 )
 
                 # Reshape oversampled data back to image dimensions (e.g., 32x32x3)
@@ -79,7 +82,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
 
             if self.naive_undersample:
                 print(
-                    f"Naive undersampling all classes to match the size of downsampled class {self.downsample_class}."
+                    f"Naive undersampling all classes to match the size of downsampled class {self.downsample_class}.",
                 )
 
                 # Calculate the target number of samples (size of downsampled class)
@@ -91,10 +94,12 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 )
                 # Reshape data and targets for use with imbalanced-learn
                 data_reshaped = self.data.reshape(
-                    self.data.shape[0], -1
+                    self.data.shape[0],
+                    -1,
                 )  # Flatten images
                 undersampled_data, undersampled_targets = rus.fit_resample(
-                    data_reshaped, self.targets
+                    data_reshaped,
+                    self.targets,
                 )
 
                 # Reshape undersampled data back to image dimensions (e.g., 32x32x3)
@@ -106,10 +111,12 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 print(f"Applying SMOTE for oversampling class {self.downsample_class}.")
                 smote = SMOTE(sampling_strategy="auto", random_state=self.random_state)
                 data_reshaped = self.data.reshape(
-                    self.data.shape[0], -1
+                    self.data.shape[0],
+                    -1,
                 )  # Flatten images
                 smote_data, smote_targets = smote.fit_resample(
-                    data_reshaped, self.targets
+                    data_reshaped,
+                    self.targets,
                 )
 
                 # Reshape SMOTE data back to image dimensions (e.g., 32x32x3)
@@ -120,16 +127,19 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
             # Apply ADASYN if enabled
             if self.adasyn:
                 print(
-                    f"Applying ADASYN for oversampling class {self.downsample_class}."
+                    f"Applying ADASYN for oversampling class {self.downsample_class}.",
                 )
                 adasyn = ADASYN(
-                    sampling_strategy="auto", random_state=self.random_state
+                    sampling_strategy="auto",
+                    random_state=self.random_state,
                 )
                 data_reshaped = self.data.reshape(
-                    self.data.shape[0], -1
+                    self.data.shape[0],
+                    -1,
                 )  # Flatten images
                 adasyn_data, adasyn_targets = adasyn.fit_resample(
-                    data_reshaped, self.targets
+                    data_reshaped,
+                    self.targets,
                 )
 
                 # Reshape ADASYN data back to image dimensions (e.g., 32x32x3)
@@ -138,7 +148,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 self.targets = list(adasyn_targets)
         else:
             print(
-                f"Class {self.downsample_class} not found in the dataset. Skipping downsampling."
+                f"Class {self.downsample_class} not found in the dataset. Skipping downsampling.",
             )
 
 
@@ -177,17 +187,20 @@ class CIFAR10DataModule(L.LightningDataModule):
             random_state=self.cfg.seed,
         )
         self.test_dataset = torchvision.datasets.CIFAR10(
-            root="./data", train=False, transform=self.test_transform
+            root="./data",
+            train=False,
+            transform=self.test_transform,
         )
 
         val_size = int(self.cfg.val_size * len(full_train_dataset))
         train_size = len(full_train_dataset) - val_size
         self.train_dataset, self.val_dataset = random_split(
-            full_train_dataset, [train_size, val_size]
+            full_train_dataset,
+            [train_size, val_size],
         )
 
         train_targets = torch.tensor(
-            [full_train_dataset.targets[i] for i in self.train_dataset.indices]
+            [full_train_dataset.targets[i] for i in self.train_dataset.indices],
         )
 
         # Calculate class counts and class weights based on the train dataset

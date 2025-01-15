@@ -1,11 +1,12 @@
 # !pip install diffusers transformers torch tqdm sentencepiece accelerate ipywidgets
 # !huggingface-cli login
-from diffusers import StableDiffusion3Pipeline
-import torch
-import os
-from tqdm import tqdm
-import random
 import itertools
+import os
+import random
+
+import torch
+from diffusers import StableDiffusion3Pipeline
+from tqdm import tqdm
 
 
 def make_img(folder: str = "./tmp", num_inference_steps=4, guidance_scale=0.0):
@@ -386,11 +387,12 @@ if __name__ == "__main__":
     ]
     print(f"Prepositions: {len(furniture_or_outdoor)}")
     print(
-        f"Objects: {len(set(list(itertools.chain.from_iterable(furniture_or_outdoor.values()))))}"
+        f"Objects: {len(set(list(itertools.chain.from_iterable(furniture_or_outdoor.values()))))}",
     )
 
     pipe = StableDiffusion3Pipeline.from_pretrained(
-        "stabilityai/stable-diffusion-3.5-large-turbo", torch_dtype=torch.bfloat16
+        "stabilityai/stable-diffusion-3.5-large-turbo",
+        torch_dtype=torch.bfloat16,
     )
     pipe = pipe.to("cuda")
     make_img("./generated_cats_stable-diffusion-3.5-large-turbo", 6)

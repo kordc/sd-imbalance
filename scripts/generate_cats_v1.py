@@ -1,15 +1,17 @@
 # !pip install diffusers transformers torch tqdm sentencepiece accelerate ipywidgets
 # !huggingface-cli login
-from diffusers import StableDiffusion3Pipeline
-import torch
-import os
-from tqdm import tqdm
-import random
 import itertools
+import os
+import random
+
+import torch
+from diffusers import StableDiffusion3Pipeline
+from tqdm import tqdm
 
 # pipe = DiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0", torch_dtype=torch.float16, use_safetensors=True, variant="fp16")
 pipe = StableDiffusion3Pipeline.from_pretrained(
-    "stabilityai/stable-diffusion-3.5-large-turbo", torch_dtype=torch.bfloat16
+    "stabilityai/stable-diffusion-3.5-large-turbo",
+    torch_dtype=torch.bfloat16,
 )
 pipe = pipe.to("cuda")
 
@@ -321,7 +323,7 @@ furniture_or_outdoor = {
 print(f"Prepositions: {len(furniture_or_outdoor)}")
 
 print(
-    f"Objects: {len(set(list(itertools.chain.from_iterable(furniture_or_outdoor.values()))))}"
+    f"Objects: {len(set(list(itertools.chain.from_iterable(furniture_or_outdoor.values()))))}",
 )
 
 # Directory to save generated images
@@ -351,7 +353,8 @@ for i in tqdm(range(num_images), desc="Generating Images"):
 
         # Save the generated image
         output_path = os.path.join(
-            output_dir, f"{i:05d}_cat_{breed}_{preposition}_{furniture}.png"
+            output_dir,
+            f"{i:05d}_cat_{breed}_{preposition}_{furniture}.png",
         )
         image.save(output_path)
 

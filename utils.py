@@ -1,8 +1,8 @@
-import torch
-import numpy as np
-from sklearn.metrics import balanced_accuracy_score
-import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import torch
+from sklearn.metrics import balanced_accuracy_score
 
 CIFAR10_CLASSES = {
     "airplane": 0,
