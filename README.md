@@ -1,4 +1,4 @@
-# SD-Imbalance
+# ImbalanceSD
 
 This repository is designed for experiments on how to use diffusion-generated synthetic data to address the problem of imbalanced datasets.
 
