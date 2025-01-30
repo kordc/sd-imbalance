@@ -208,12 +208,12 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
 
         # Append to existing dataset data
         print(
-            f"Adding {len(new_images)} extra images as class 3 ('cat') to the dataset."
+            f"Adding {len(new_images)} extra images as class {self.downsample_class} to the dataset."
         )
         self.data = np.concatenate([self.data, new_images], axis=0)
 
         # Extend targets with class index 3 for each new image
-        self.targets.extend([3] * len(new_images))
+        self.targets.extend([self.downsample_class] * len(new_images))
 
 
 class CIFAR10DataModule(L.LightningDataModule):
