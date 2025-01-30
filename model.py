@@ -163,7 +163,7 @@ class ResNet18Model(L.LightningModule):
                     accuracy,
                     on_step=False,
                     on_epoch=True,
-                    prog_bar=True,
+                    prog_bar=False,
                 )
 
         self.val_accuracy.reset()
@@ -182,7 +182,7 @@ class ResNet18Model(L.LightningModule):
                     accuracy,
                     on_step=False,
                     on_epoch=True,
-                    prog_bar=True,
+                    prog_bar=False,
                 )
 
         self.test_accuracy.reset()
