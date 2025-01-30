@@ -6,7 +6,8 @@ This repository is designed for experiments on how to use diffusion-generated sy
 
 Install all the required packages by running the following command:
 ```sh
-pip install -r requirements.txt
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv run train.py
 ```
 
 ## Usage

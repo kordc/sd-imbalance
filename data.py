@@ -1,3 +1,5 @@
+import os
+
 import lightning as L
 import numpy as np
 import torch
@@ -17,7 +19,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         root,
         train=True,
         transform=None,
-        download=False,
+        download=True,
         downsample_class=None,
         downsample_ratio=1.0,
         naive_oversample=False,
@@ -60,7 +62,16 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
 
             if (
                 self.naive_oversample
-            ):  # TODO: Add only one possible option, refactor this code and config
+                + self.naive_undersample
+                + self.smote
+                + self.adasyn
+                > 1
+            ):
+                raise ValueError(
+                    "Only one of naive_oversample, naive_undersample, smote, or adasyn can be True at a time.",
+                )
+
+            if self.naive_oversample:
                 print(
                     f"Naive oversampling class {self.downsample_class} to original size using RandomOverSampler.",
                 )
@@ -80,7 +91,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 self.data = oversampled_data
                 self.targets = list(oversampled_targets)
 
-            if self.naive_undersample:
+            elif self.naive_undersample:
                 print(
                     f"Naive undersampling all classes to match the size of downsampled class {self.downsample_class}.",
                 )
@@ -107,7 +118,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 self.data = undersampled_data
                 self.targets = list(undersampled_targets)
 
-            if self.smote:
+            elif self.smote:
                 print(f"Applying SMOTE for oversampling class {self.downsample_class}.")
                 smote = SMOTE(sampling_strategy="auto", random_state=self.random_state)
                 data_reshaped = self.data.reshape(
@@ -124,8 +135,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 self.data = smote_data
                 self.targets = list(smote_targets)
 
-            # Apply ADASYN if enabled
-            if self.adasyn:
+            elif self.adasyn:
                 print(
                     f"Applying ADASYN for oversampling class {self.downsample_class}.",
                 )
@@ -171,9 +181,8 @@ class CIFAR10DataModule(L.LightningDataModule):
         return transforms.Compose(transform_list)
 
     def prepare_data(self):
-        torchvision.datasets.CIFAR10(root="./data", train=True, download=True)
-        torchvision.datasets.CIFAR10(root="./data", train=False, download=True)
-
+        cifar10_train_path = os.path.join("./data", "cifar-10-batches-py")
+        download_flag = not os.path.exists(cifar10_train_path)
         full_train_dataset = DownsampledCIFAR10(
             root="./data",
             train=True,
@@ -185,11 +194,13 @@ class CIFAR10DataModule(L.LightningDataModule):
             smote=self.cfg.smote,
             adasyn=self.cfg.adasyn,
             random_state=self.cfg.seed,
+            download=download_flag,
         )
         self.test_dataset = torchvision.datasets.CIFAR10(
             root="./data",
             train=False,
             transform=self.test_transform,
+            download=download_flag,
         )
 
         val_size = int(self.cfg.val_size * len(full_train_dataset))
@@ -214,6 +225,7 @@ class CIFAR10DataModule(L.LightningDataModule):
             batch_size=self.cfg.batch_size,
             shuffle=True,
             num_workers=self.cfg.num_workers,
+            persistent_workers=True,
         )
 
     def val_dataloader(self):
@@ -222,6 +234,7 @@ class CIFAR10DataModule(L.LightningDataModule):
             batch_size=self.cfg.batch_size,
             shuffle=False,
             num_workers=self.cfg.num_workers,
+            persistent_workers=True,
         )
 
     def test_dataloader(self):
@@ -230,4 +243,5 @@ class CIFAR10DataModule(L.LightningDataModule):
             batch_size=self.cfg.batch_size,
             shuffle=False,
             num_workers=self.cfg.num_workers,
+            persistent_workers=True,
         )

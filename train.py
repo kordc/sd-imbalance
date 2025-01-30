@@ -15,7 +15,7 @@ def main(cfg: DictConfig):
     data_module = CIFAR10DataModule(cfg)
     data_module.prepare_data()
     model = ResNet18Model(cfg, class_weights=data_module.class_weights)
-    if torch.__version__ >= "2.0.0":
+    if cfg.compile:
         model = torch.compile(model)
     torch.set_float32_matmul_precision("medium")
 

@@ -12,6 +12,7 @@ label_smoothing: false
 class_weighting: false
 name: basic_experiment
 epochs: 100
+compile: False
 batch_size: 128
 learning_rate: 0.1
 val_size: 0.2
