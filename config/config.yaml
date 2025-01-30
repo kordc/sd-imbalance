@@ -10,6 +10,9 @@ smote: false
 adasyn: false
 label_smoothing: false
 class_weighting: false
+add_extra_images: false
+extra_images_dir: extra-images
+max_extra_images:
 name: basic_experiment
 epochs: 100
 compile: False

@@ -1,3 +1,4 @@
+import glob
 import os
 
 import lightning as L
@@ -7,6 +8,7 @@ import torchvision
 from imblearn.over_sampling import ADASYN, SMOTE, RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
 from omegaconf import DictConfig
+from PIL import Image
 from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
 
@@ -27,6 +29,9 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         smote=False,
         adasyn=False,
         random_state=42,
+        add_extra_images=False,
+        extra_images_dir="extra-images",
+        max_extra_images=None,
     ):
         super().__init__(root=root, train=train, transform=transform, download=download)
         self.downsample_class = downsample_class
@@ -36,8 +41,16 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         self.smote = smote
         self.adasyn = adasyn
         self.random_state = random_state
+
+        self.add_extra_images = add_extra_images
+        self.extra_images_dir = extra_images_dir
+        self.max_extra_images = max_extra_images
+
         if downsample_class is not None:
             self._downsample()
+
+        if self.add_extra_images:
+            self._add_extra_images()
 
     def _downsample(self):
         targets = np.array(self.targets)
@@ -161,6 +174,47 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 f"Class {self.downsample_class} not found in the dataset. Skipping downsampling.",
             )
 
+    def _add_extra_images(self):
+        """Adds extra images (all labeled as class 3, i.e. 'cat') from a directory
+        into the training data. Optionally include only a random subset of them.
+        """
+        image_files = glob(os.path.join(self.extra_images_dir, "*.*"))  # jpg, png, etc.
+        if not image_files:
+            print(
+                f"No images found under '{self.extra_images_dir}'. Skipping extra images."
+            )
+            return
+
+        # Shuffle if the user wants only a subset
+        if self.max_extra_images is not None:
+            np.random.shuffle(image_files)
+            image_files = image_files[: self.max_extra_images]
+
+        # Load each image, resize to 32x32, convert to np array
+        new_images_list = []
+        for fpath in image_files:
+            with Image.open(fpath) as img:
+                img = img.convert("RGB")  # ensure 3 channels
+                img = img.resize((32, 32))
+                arr = np.array(img)  # shape (32, 32, 3)
+                new_images_list.append(arr)
+
+        if not new_images_list:
+            print(f"No valid extra images found in {self.extra_images_dir}.")
+            return
+
+        # Stack them into shape (N, 32, 32, 3)
+        new_images = np.stack(new_images_list, axis=0)
+
+        # Append to existing dataset data
+        print(
+            f"Adding {len(new_images)} extra images as class 3 ('cat') to the dataset."
+        )
+        self.data = np.concatenate([self.data, new_images], axis=0)
+
+        # Extend targets with class index 3 for each new image
+        self.targets.extend([3] * len(new_images))
+
 
 class CIFAR10DataModule(L.LightningDataModule):
     def __init__(self, cfg: DictConfig):
@@ -195,6 +249,9 @@ class CIFAR10DataModule(L.LightningDataModule):
             adasyn=self.cfg.adasyn,
             random_state=self.cfg.seed,
             download=download_flag,
+            add_extra_images=self.cfg.add_extra_images,
+            extra_images_dir=self.cfg.extra_images_dir,
+            max_extra_images=self.cfg.max_extra_images,
         )
         self.test_dataset = torchvision.datasets.CIFAR10(
             root="./data",
