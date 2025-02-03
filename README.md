@@ -5,10 +5,18 @@ This repository is designed for experiments on how to use diffusion-generated sy
 ## Installation
 
 Install all the required packages by running the following command:
+*Linux*
 ```sh
 curl -LsSf https://astral.sh/uv/install.sh | sh
 uv run train.py
 ```
+*Windows*
+```sh
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.5.26/install.ps1 | iex"
+
+uv run train.py
+```
+
 
 ## Usage
 ### Training
