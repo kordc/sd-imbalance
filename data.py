@@ -183,7 +183,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
             print(
                 f"No images found under '{self.extra_images_dir}'. Skipping extra images."
             )
-            return
+            exit()
 
         # Shuffle if the user wants only a subset
         if self.max_extra_images is not None:
