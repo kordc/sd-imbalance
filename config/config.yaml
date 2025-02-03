@@ -11,7 +11,7 @@ adasyn: false
 label_smoothing: false
 class_weighting: false
 add_extra_images: false
-extra_images_dir: extra-images
+extra_images_dir: extra-images # Remember to add full path
 max_extra_images:
 name: basic_experiment
 epochs: 100
