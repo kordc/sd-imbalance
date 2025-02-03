@@ -36,8 +36,7 @@ TODO:
 - 0.01 Cat + FLUX.1-schnell
 - 0.01 Cat + FLUX.1-dev
 - Poprawić baseline tak, żeby test set miał >90% accuracy
-- add uv package managment
--  Najlepszy z powyższych zbiorów z active learningiem (3 różne funkcje aquisition wyboru)
+- Najlepszy z powyższych zbiorów z active learningiem (3 różne funkcje aquisition wyboru)
 - Downsampled + black-forest-labs/FLUX.1-Redux-dev jako agresywna augmentacja
 - Downsampled + najlepszy z powyższych modeli dotrenowany LoRA do fotorealizmu (albo maszyna z większym GPU, która uciągnie obecną LoRA do FLUX.1-dev)
 - Powyższe, ale z Active generation i podobnym mechanizmem
