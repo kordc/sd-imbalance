@@ -1,4 +1,4 @@
-import glob
+from glob import glob
 import os
 
 import lightning as L
