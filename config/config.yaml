@@ -2,18 +2,21 @@ hydra:
   job:
     chdir: True
 
+dynamic_upsample: true
+num_dynamic_upsample: 50
+
 downsample_class: cat # Class to downsample, e.g., "cat"
 downsample_ratio: 0.01 # How many examples to keep
-naive_oversample: true
+naive_oversample: false
 naive_undersample: false
 smote: false
 adasyn: false
 label_smoothing: false
 class_weighting: false
 add_extra_images: false
-extra_images_dir: generated_cats_stable-diffusion-3.5-large-turbo # Remember to add full path
+extra_images_dir: /home/ubuntu/generated_cats_stable-diffusion-3.5-large-turbo # Remember to add full path
 max_extra_images: 4950
-name: more_augm_oversample
+name: active
 epochs: 100
 compile: False
 batch_size: 128
@@ -33,24 +36,24 @@ augmentations:
           padding: 4
     - name: RandomHorizontalFlip
       params:
-          p: 0.3
-    - name: ColorJitter
-      params:
-          brightness: 0.5
-          hue: 0.3
-    - name: RandomPerspective
-      params:
-          distortion_scale: 0.2
-          p: 0.2
-          fill: 0
-    - name: RandomRotation
-      params:
-          degrees: 180
-          fill: 0
-    - name: RandomSolarize
-      params:
-          threshold: 0.75
-          p: 0.1
+          p: 0.5
+    # - name: ColorJitter
+    #   params:
+    #       brightness: 0.5
+    #       hue: 0.3
+    # - name: RandomPerspective
+    #   params:
+    #       distortion_scale: 0.2
+    #       p: 1.0
+    #       fill: 0
+    # - name: RandomRotation
+    #   params:
+    #       degrees: 180
+    #       fill: 0
+    # - name: RandomSolarize
+    #   params:
+    #       threshold: 0.75
+    #       p: 0.5
 test_augmentations:
     - name: ToTensor
     - name: Normalize

@@ -1,21 +1,24 @@
+import os
+import glob
 import lightning as L
 import torch
 import torchvision
+import torch.nn.functional as F
 from omegaconf import DictConfig
 from sklearn.metrics import balanced_accuracy_score, confusion_matrix
 from torchmetrics import Accuracy
+from torchvision import transforms
 
-from utils import CIFAR10_CLASSES_REVERSE
-
+from utils import CIFAR10_CLASSES_REVERSE, CIFAR10_CLASSES  # if needed
 
 class ResNet18Model(L.LightningModule):
     def __init__(self, cfg: DictConfig, class_weights=None):
         super().__init__()
         self.cfg = cfg
         self.model = torchvision.models.resnet18(num_classes=10)
-        self.criterion = torch.nn.CrossEntropyLoss()
         self.class_weights = class_weights
 
+        # Setup the loss: use class weights, label smoothing, or default cross entropy.
         if self.class_weights is not None:
             self.criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
         elif cfg.label_smoothing:
@@ -23,7 +26,7 @@ class ResNet18Model(L.LightningModule):
         else:
             self.criterion = torch.nn.CrossEntropyLoss()
 
-        # Define accuracy metric
+        # Define accuracy metrics.
         self.train_accuracy = Accuracy(num_classes=10, task="multiclass")
         self.val_accuracy = Accuracy(num_classes=10, task="multiclass")
         self.test_accuracy = Accuracy(num_classes=10, task="multiclass")
@@ -148,7 +151,13 @@ class ResNet18Model(L.LightningModule):
         return {"test_loss": test_loss}
 
     def on_train_epoch_end(self):
+        # Reset training accuracy metric.
         self.train_accuracy.reset()
+
+        # --- Dynamic Upsampling Logic ---
+        # Check if dynamic upsampling is enabled in the config.
+        if self.cfg.get("dynamic_upsample", False):
+            self.dynamic_upsample()
 
     def on_validation_epoch_end(self):
         if self.val_confusion_matrix is not None:
@@ -200,3 +209,90 @@ class ResNet18Model(L.LightningModule):
             T_max=self.cfg.epochs,
         )
         return [optimizer], [scheduler]
+
+    def dynamic_upsample(self):
+        """
+        Dynamically upsamples the training data by adding candidate images with
+        the highest uncertainty. This method is called at the end of every training
+        epoch (if enabled via self.cfg.dynamic_upsample) to add N (default 50)
+        candidate examples to the training dataset.
+    
+        The acquisition score is computed as the entropy of the model's softmax 
+        output (i.e. higher entropy indicates higher uncertainty).
+    
+        Assumes candidate images are stored in self.cfg.extra_images_dir.
+        The new images are added with the label corresponding to the minority 
+        class (self.cfg.downsample_class).
+        """
+        import numpy as np
+        import torch.nn.functional as F
+        from PIL import Image
+        from torchvision import transforms
+    
+        num_to_add = self.cfg.get("num_dynamic_upsample", 50)
+        candidate_dir = self.cfg.extra_images_dir
+        candidate_files = glob.glob(os.path.join(candidate_dir, "*.*"))
+        if not candidate_files:
+            self.print(f"No candidate images found in '{candidate_dir}' for dynamic upsampling.")
+            return
+    
+        # Use a candidate transform that converts PIL images to float tensors
+        candidate_transform = transforms.Compose([
+            transforms.Resize((32, 32)),
+            transforms.ToTensor(),  # This converts to float and scales to [0, 1]
+        ])
+    
+        candidate_scores = []
+        candidate_images = []
+    
+        self.model.eval()
+        device = self.device
+    
+        with torch.no_grad():
+            for fpath in candidate_files:
+                try:
+                    # Load image using PIL and apply the candidate transform.
+                    pil_image = Image.open(fpath).convert("RGB")
+                    image = candidate_transform(pil_image)
+                except Exception as e:
+                    self.print(f"Error loading image {fpath}: {e}")
+                    continue
+    
+                image = image.unsqueeze(0).to(device)  # add batch dimension
+                output = self.model(image)
+                probs = F.softmax(output, dim=1)
+                # Compute entropy as the acquisition score.
+                entropy = -torch.sum(probs * torch.log(probs + 1e-8)).item()
+                candidate_scores.append(entropy)
+                # Also store the candidate image in numpy format (H x W x C)
+                candidate_images.append(np.array(pil_image.resize((32, 32))))
+    
+        candidate_scores = np.array(candidate_scores)
+        if len(candidate_scores) < num_to_add:
+            self.print(f"Only {len(candidate_scores)} candidate images available; adding all.")
+            top_indices = np.arange(len(candidate_scores))
+        else:
+            top_indices = np.argsort(candidate_scores)[-num_to_add:]
+    
+        selected_images = [candidate_images[i] for i in top_indices]
+    
+        # Determine the target label for these dynamic examples.
+        if isinstance(self.cfg.downsample_class, str):
+            from utils import CIFAR10_CLASSES  # assuming this conversion exists in your utils
+            target_label = CIFAR10_CLASSES[self.cfg.downsample_class]
+        else:
+            target_label = self.cfg.downsample_class
+    
+        try:
+            train_dataset = self.trainer.datamodule.train_dataset.dataset
+        except Exception as e:
+            self.print("Could not access training dataset from datamodule.")
+            return
+    
+        try:
+            new_data = np.stack(selected_images, axis=0)
+            train_dataset.data = np.concatenate([train_dataset.data, new_data], axis=0)
+            train_dataset.targets.extend([target_label] * len(selected_images))
+            self.print(f"Dynamic upsampling: added {len(selected_images)} images to the training dataset for class {target_label}.")
+        except Exception as e:
+            self.print(f"Error during dynamic upsampling: {e}")
