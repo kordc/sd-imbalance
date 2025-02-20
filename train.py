@@ -2,7 +2,7 @@ import hydra
 import lightning as L
 import torch
 import wandb
-from lightning.pytorch.loggers import CSVLogger, WandbLogger
+from lightning.pytorch.loggers import WandbLogger
 from omegaconf import DictConfig, OmegaConf
 
 from data import CIFAR10DataModule
@@ -101,7 +101,7 @@ def main(cfg: DictConfig):
         max_epochs=cfg.epochs,
         accelerator="auto",
         devices="auto",
-        logger=[csv_logger, wandb_logger],
+        logger=[wandb_logger],
         log_every_n_steps=1,
     )
 
