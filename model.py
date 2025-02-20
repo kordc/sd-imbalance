@@ -37,6 +37,22 @@ class ResNet18Model(L.LightningModule):
     def forward(self, x):
         return self.model(x)
 
+    def visualize_feature_maps(self, x):
+        """
+        Registers a forward hook on a chosen layer (here layer1)
+        and returns the feature maps produced for the input x.
+        """
+        features = []
+        def hook_fn(module, input, output):
+            features.append(output)
+        # Choose layer1 for visualization (can be changed as needed)
+        hook = self.model.layer1.register_forward_hook(hook_fn)
+        self.eval()
+        with torch.no_grad():
+            _ = self(x)
+        hook.remove()
+        return features[0]
+
     def training_step(self, batch, batch_idx):
         inputs, labels = batch
         outputs = self(inputs)

@@ -1,11 +1,13 @@
 hydra:
+  run:
+    dir: .      # Use the current working directory for running the job.
   job:
-    chdir: True
+    chdir: False  # Do not change the working directory.
 
 dynamic_upsample: true
 num_dynamic_upsample: 50
 
-downsample_class: cat # Class to downsample, e.g., "cat"
+downsample_class: # Class to downsample, e.g., "cat"
 downsample_ratio: 0.01 # How many examples to keep
 naive_oversample: false
 naive_undersample: false
@@ -60,3 +62,6 @@ test_augmentations:
       params:
           mean: [0.485, 0.456, 0.406]
           std: [0.229, 0.224, 0.225]
+
+checkpoint_path: /home/ubuntu/KarolMgr/sd-imbalance/notebooks/model.ckpt      # Set a path here to load a checkpoint
+visualize_feature_maps: true  # Set to true to only visualize feature maps

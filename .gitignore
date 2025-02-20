@@ -118,3 +118,6 @@ venv.bak/
 outputs/*
 data/*
 .ruff_cache/*
+.hydra/*
+*.png
+*.ckpt
