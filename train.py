@@ -66,13 +66,14 @@ def main(cfg: DictConfig):
                 sample = sample.clamp(0, 1)
                 # Optionally convert to 8-bit values explicitly:
                 sample_img = TF.to_pil_image(sample)
+                sample_img_resized = sample_img.resize((512, 512), resample=Image.BICUBIC)
             elif isinstance(sample, Image.Image):
                 sample_img = sample
             else:
                 raise TypeError("Unsupported image type for saving the sample.")
             
             sample_save_path = "sample_image.png"
-            sample_img.save(sample_save_path)
+            sample_img_resized.save(sample_save_path)
             print(f"Sample image saved to {sample_save_path}")
             
             sample = dataset[chosen_index][0].unsqueeze(0).to(model.device)
