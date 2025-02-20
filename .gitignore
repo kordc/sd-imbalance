@@ -121,3 +121,4 @@ data/*
 .hydra/*
 *.png
 *.ckpt
+wandb/*
