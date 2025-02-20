@@ -21,7 +21,7 @@ def main(cfg: DictConfig):
 
     csv_logger = CSVLogger(save_dir="logs/", name="cifar10")
     config_dict = OmegaConf.to_container(cfg, resolve=True)
-    wandb_logger = WandbLogger(project="cifar10_project", log_model="all")
+    wandb_logger = WandbLogger(project="cifar10_project", log_model="True")
     wandb.init(config=config_dict, project="cifar10_project", name=cfg.name)
 
     trainer = L.Trainer(
