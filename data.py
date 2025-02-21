@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
 
 from utils import CIFAR10_CLASSES
+from scripts.flux_redux_augment import FluxReduxAugment
 
 
 class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
@@ -228,10 +229,17 @@ class CIFAR10DataModule(L.LightningDataModule):
 
     def get_augmentations(self, augmentations_cfg):
         transform_list = []
+        # Mapping for custom transforms.
+        custom_transforms = {
+            "FluxReduxAugment": FluxReduxAugment
+        }
         for aug in augmentations_cfg:
             aug_name = aug["name"]
             params = aug.get("params", {})
-            transform_list.append(getattr(transforms, aug_name)(**params))
+            if aug_name in custom_transforms:
+                transform_list.append(custom_transforms[aug_name](**params))
+            else:
+                transform_list.append(getattr(transforms, aug_name)(**params))
         return transforms.Compose(transform_list)
 
     def prepare_data(self):
