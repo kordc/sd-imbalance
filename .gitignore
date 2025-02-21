@@ -122,3 +122,8 @@ data/*
 *.png
 *.ckpt
 wandb/*
+notebooks/wandb*
+*.jpg
+*.json
+*.jsonl
+*.safetensors
