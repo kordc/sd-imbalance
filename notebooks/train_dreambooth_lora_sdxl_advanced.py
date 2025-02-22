@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,8 +25,9 @@ import shutil
 import warnings
 from contextlib import nullcontext
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
+import diffusers
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -40,21 +40,6 @@ from accelerate.utils import (
     ProjectConfiguration,
     set_seed,
 )
-from huggingface_hub import create_repo, hf_hub_download, upload_folder
-from huggingface_hub.utils import insecure_hashlib
-from packaging import version
-from peft import LoraConfig, set_peft_model_state_dict
-from peft.utils import get_peft_model_state_dict
-from PIL import Image
-from PIL.ImageOps import exif_transpose
-from safetensors.torch import load_file, save_file
-from torch.utils.data import Dataset
-from torchvision import transforms
-from torchvision.transforms.functional import crop
-from tqdm.auto import tqdm
-from transformers import AutoTokenizer, PretrainedConfig
-
-import diffusers
 from diffusers import (
     AutoencoderKL,
     DDPMScheduler,
@@ -81,7 +66,19 @@ from diffusers.utils import (
 )
 from diffusers.utils.import_utils import is_xformers_available
 from diffusers.utils.torch_utils import is_compiled_module
-
+from huggingface_hub import create_repo, hf_hub_download, upload_folder
+from huggingface_hub.utils import insecure_hashlib
+from packaging import version
+from peft import LoraConfig, set_peft_model_state_dict
+from peft.utils import get_peft_model_state_dict
+from PIL import Image
+from PIL.ImageOps import exif_transpose
+from safetensors.torch import load_file, save_file
+from torch.utils.data import Dataset
+from torchvision import transforms
+from torchvision.transforms.functional import crop
+from tqdm.auto import tqdm
+from transformers import AutoTokenizer, PretrainedConfig
 
 if is_wandb_available():
     import wandb
@@ -103,24 +100,23 @@ def determine_scheduler_type(pretrained_model_name_or_path, revision):
             revision=revision,
         )
 
-    with open(model_index, "r") as f:
-        scheduler_type = json.load(f)["scheduler"][1]
-    return scheduler_type
+    with open(model_index) as f:
+        return json.load(f)["scheduler"][1]
 
 
 def save_model_card(
     repo_id: str,
     use_dora: bool,
     images=None,
-    base_model: str = None,
+    base_model: Optional[str] = None,
     train_text_encoder=False,
     train_text_encoder_ti=False,
     token_abstraction_dict=None,
-    instance_prompt: str = None,
-    validation_prompt: str = None,
+    instance_prompt: Optional[str] = None,
+    validation_prompt: Optional[str] = None,
     repo_folder=None,
     vae_path=None,
-):
+) -> None:
     img_str = "widget:\n"
     lora = "lora" if not use_dora else "dora"
     for i, image in enumerate(images):
@@ -137,7 +133,7 @@ def save_model_card(
         """
     embeddings_filename = f"{repo_folder}_emb"
     instance_prompt_webui = re.sub(
-        r"<s\d+>", "", re.sub(r"<s\d+>", embeddings_filename, instance_prompt, count=1)
+        r"<s\d+>", "", re.sub(r"<s\d+>", embeddings_filename, instance_prompt, count=1),
     )
     ti_keys = ", ".join(
         f'"{match}"' for match in re.findall(r"<s\d+>", instance_prompt)
@@ -262,7 +258,7 @@ def log_validation(
 ):
     logger.info(
         f"Running validation... \n Generating {args.num_validation_images} images with prompt:"
-        f" {args.validation_prompt}."
+        f" {args.validation_prompt}.",
     )
 
     # We train on the simplified learning objective. If we were previously predicting a variance, we need the scheduler to ignore it
@@ -278,7 +274,7 @@ def log_validation(
             scheduler_args["variance_type"] = variance_type
 
         pipeline.scheduler = DPMSolverMultistepScheduler.from_config(
-            pipeline.scheduler.config, **scheduler_args
+            pipeline.scheduler.config, **scheduler_args,
         )
 
     pipeline = pipeline.to(accelerator.device)
@@ -317,8 +313,8 @@ def log_validation(
                     phase_name: [
                         wandb.Image(image, caption=f"{i}: {args.validation_prompt}")
                         for i, image in enumerate(images)
-                    ]
-                }
+                    ],
+                },
             )
 
     del pipeline
@@ -329,10 +325,10 @@ def log_validation(
 
 
 def import_model_class_from_model_name_or_path(
-    pretrained_model_name_or_path: str, revision: str, subfolder: str = "text_encoder"
+    pretrained_model_name_or_path: str, revision: str, subfolder: str = "text_encoder",
 ):
     text_encoder_config = PretrainedConfig.from_pretrained(
-        pretrained_model_name_or_path, subfolder=subfolder, revision=revision
+        pretrained_model_name_or_path, subfolder=subfolder, revision=revision,
     )
     model_class = text_encoder_config.architectures[0]
 
@@ -340,12 +336,12 @@ def import_model_class_from_model_name_or_path(
         from transformers import CLIPTextModel
 
         return CLIPTextModel
-    elif model_class == "CLIPTextModelWithProjection":
+    if model_class == "CLIPTextModelWithProjection":
         from transformers import CLIPTextModelWithProjection
 
         return CLIPTextModelWithProjection
-    else:
-        raise ValueError(f"{model_class} is not supported.")
+    msg = f"{model_class} is not supported."
+    raise ValueError(msg)
 
 
 def parse_args(input_args=None):
@@ -527,7 +523,7 @@ def parse_args(input_args=None):
         help="The output directory where the model predictions and checkpoints will be written.",
     )
     parser.add_argument(
-        "--seed", type=int, default=None, help="A seed for reproducible training."
+        "--seed", type=int, default=None, help="A seed for reproducible training.",
     )
     parser.add_argument(
         "--resolution",
@@ -774,7 +770,7 @@ def parse_args(input_args=None):
         "Ignored if optimizer is adamW",
     )
     parser.add_argument(
-        "--max_grad_norm", default=1.0, type=float, help="Max gradient norm."
+        "--max_grad_norm", default=1.0, type=float, help="Max gradient norm.",
     )
     parser.add_argument(
         "--push_to_hub",
@@ -852,7 +848,7 @@ def parse_args(input_args=None):
         help="Whether or not to use xformers.",
     )
     parser.add_argument(
-        "--noise_offset", type=float, default=0, help="The scale of noise offset."
+        "--noise_offset", type=float, default=0, help="The scale of noise offset.",
     )
     parser.add_argument(
         "--rank",
@@ -899,57 +895,62 @@ def parse_args(input_args=None):
         args = parser.parse_args()
 
     if args.dataset_name is None and args.instance_data_dir is None:
-        raise ValueError("Specify either `--dataset_name` or `--instance_data_dir`")
+        msg = "Specify either `--dataset_name` or `--instance_data_dir`"
+        raise ValueError(msg)
 
     if args.dataset_name is not None and args.instance_data_dir is not None:
+        msg = "Specify only one of `--dataset_name` or `--instance_data_dir`"
         raise ValueError(
-            "Specify only one of `--dataset_name` or `--instance_data_dir`"
+            msg,
         )
 
     if args.train_text_encoder and args.train_text_encoder_ti:
-        raise ValueError(
+        msg = (
             "Specify only one of `--train_text_encoder` or `--train_text_encoder_ti. "
             "For full LoRA text encoder training check --train_text_encoder, for textual "
             "inversion training check `--train_text_encoder_ti`"
         )
+        raise ValueError(
+            msg,
+        )
     if args.use_blora and args.lora_unet_blocks:
         warnings.warn(
             "You specified both `--use_blora` and `--lora_unet_blocks`, for B-LoRA training, target unet blocks are: `unet.up_blocks.0.attentions.0` and `unet.up_blocks.0.attentions.1`. "
-            "If you wish to target different U-net blocks, don't enable `--use_blora`"
+            "If you wish to target different U-net blocks, don't enable `--use_blora`", stacklevel=2,
         )
 
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
-    if env_local_rank != -1 and env_local_rank != args.local_rank:
+    if env_local_rank not in (-1, args.local_rank):
         args.local_rank = env_local_rank
 
     if args.with_prior_preservation:
         if args.class_data_dir is None:
-            raise ValueError("You must specify a data directory for class images.")
+            msg = "You must specify a data directory for class images."
+            raise ValueError(msg)
         if args.class_prompt is None:
-            raise ValueError("You must specify prompt for class images.")
+            msg = "You must specify prompt for class images."
+            raise ValueError(msg)
     else:
         # logger is not available yet
         if args.class_data_dir is not None:
             warnings.warn(
-                "You need not use --class_data_dir without --with_prior_preservation."
+                "You need not use --class_data_dir without --with_prior_preservation.", stacklevel=2,
             )
         if args.class_prompt is not None:
             warnings.warn(
-                "You need not use --class_prompt without --with_prior_preservation."
+                "You need not use --class_prompt without --with_prior_preservation.", stacklevel=2,
             )
 
     return args
 
 
 # Taken (and slightly modified) from B-LoRA repo https://github.com/yardenfren1996/B-LoRA/blob/main/blora_utils.py
-def is_belong_to_blocks(key, blocks):
+def is_belong_to_blocks(key, blocks) -> Optional[bool]:
     try:
-        for g in blocks:
-            if g in key:
-                return True
-        return False
+        return any(g in key for g in blocks)
     except Exception as e:
-        raise type(e)(f"failed to is_belong_to_block, due to: {e}")
+        msg = f"failed to is_belong_to_block, due to: {e}"
+        raise type(e)(msg)
 
 
 def get_unet_lora_target_modules(unet, use_blora, target_blocks=None):
@@ -966,30 +967,32 @@ def get_unet_lora_target_modules(unet, use_blora, target_blocks=None):
             if is_belong_to_blocks(attn_processor_name, blocks)
         ]
 
-        target_modules = [
+        return [
             f"{attn}.{mat}"
             for mat in ["to_k", "to_q", "to_v", "to_out.0"]
             for attn in attns
         ]
-        return target_modules
     except Exception as e:
-        raise type(e)(
+        msg = (
             f"failed to get_target_modules, due to: {e}. "
             f"Please check the modules specified in --lora_unet_blocks are correct"
+        )
+        raise type(e)(
+            msg,
         )
 
 
 # Taken from https://github.com/replicate/cog-sdxl/blob/main/dataset_and_utils.py
 class TokenEmbeddingsHandler:
-    def __init__(self, text_encoders, tokenizers):
+    def __init__(self, text_encoders, tokenizers) -> None:
         self.text_encoders = text_encoders
         self.tokenizers = tokenizers
 
         self.train_ids: Optional[torch.Tensor] = None
-        self.inserting_toks: Optional[List[str]] = None
+        self.inserting_toks: Optional[list[str]] = None
         self.embeddings_settings = {}
 
-    def initialize_new_tokens(self, inserting_toks: List[str]):
+    def initialize_new_tokens(self, inserting_toks: list[str]) -> None:
         idx = 0
         for tokenizer, text_encoder in zip(self.tokenizers, self.text_encoders):
             assert isinstance(inserting_toks, list), (
@@ -1011,13 +1014,12 @@ class TokenEmbeddingsHandler:
                 text_encoder.text_model.embeddings.token_embedding.weight.data.std()
             )
 
-            print(f"{idx} text encoder's std_token_embedding: {std_token_embedding}")
 
             text_encoder.text_model.embeddings.token_embedding.weight.data[
                 self.train_ids
             ] = (
                 torch.randn(
-                    len(self.train_ids), text_encoder.text_model.config.hidden_size
+                    len(self.train_ids), text_encoder.text_model.config.hidden_size,
                 )
                 .to(device=self.device)
                 .to(dtype=self.dtype)
@@ -1033,11 +1035,10 @@ class TokenEmbeddingsHandler:
 
             self.embeddings_settings[f"index_no_updates_{idx}"] = inu
 
-            print(self.embeddings_settings[f"index_no_updates_{idx}"].shape)
 
             idx += 1
 
-    def save_embeddings(self, file_path: str):
+    def save_embeddings(self, file_path: str) -> None:
         assert self.train_ids is not None, (
             "Initialize new tokens before saving embeddings."
         )
@@ -1071,7 +1072,7 @@ class TokenEmbeddingsHandler:
         return self.text_encoders[0].device
 
     @torch.no_grad()
-    def retract_embeddings(self):
+    def retract_embeddings(self) -> None:
         for idx, text_encoder in enumerate(self.text_encoders):
             index_no_updates = self.embeddings_settings[f"index_no_updates_{idx}"]
             text_encoder.text_model.embeddings.token_embedding.weight.data[
@@ -1101,8 +1102,7 @@ class TokenEmbeddingsHandler:
 
 
 class DreamBoothDataset(Dataset):
-    """
-    A dataset to prepare the instance and class images with the prompts for fine-tuning the model.
+    """A dataset to prepare the instance and class images with the prompts for fine-tuning the model.
     It pre-processes the images.
     """
 
@@ -1118,7 +1118,7 @@ class DreamBoothDataset(Dataset):
         size=1024,
         repeats=1,
         center_crop=False,
-    ):
+    ) -> None:
         self.size = size
         self.center_crop = center_crop
 
@@ -1133,10 +1133,13 @@ class DreamBoothDataset(Dataset):
             try:
                 from datasets import load_dataset
             except ImportError:
-                raise ImportError(
+                msg = (
                     "You are trying to load your data using the datasets library. If you wish to train using custom "
                     "captions please install the datasets library: `pip install datasets`. If you wish to load a "
                     "local folder containing images only, specify --instance_data_dir instead."
+                )
+                raise ImportError(
+                    msg,
                 )
             # Downloading and loading a dataset from the hub.
             # See more about loading custom images at
@@ -1156,8 +1159,9 @@ class DreamBoothDataset(Dataset):
             else:
                 image_column = args.image_column
                 if image_column not in column_names:
+                    msg = f"`--image_column` value '{args.image_column}' not found in dataset columns. Dataset columns are: {', '.join(column_names)}"
                     raise ValueError(
-                        f"`--image_column` value '{args.image_column}' not found in dataset columns. Dataset columns are: {', '.join(column_names)}"
+                        msg,
                     )
             instance_images = dataset["train"][image_column]
 
@@ -1165,25 +1169,27 @@ class DreamBoothDataset(Dataset):
                 logger.info(
                     "No caption column provided, defaulting to instance_prompt for all images. If your dataset "
                     "contains captions/prompts for the images, make sure to specify the "
-                    "column as --caption_column"
+                    "column as --caption_column",
                 )
                 self.custom_instance_prompts = None
             else:
                 if args.caption_column not in column_names:
+                    msg = f"`--caption_column` value '{args.caption_column}' not found in dataset columns. Dataset columns are: {', '.join(column_names)}"
                     raise ValueError(
-                        f"`--caption_column` value '{args.caption_column}' not found in dataset columns. Dataset columns are: {', '.join(column_names)}"
+                        msg,
                     )
                 custom_instance_prompts = dataset["train"][args.caption_column]
                 # create final list of captions according to --repeats
                 self.custom_instance_prompts = []
                 for caption in custom_instance_prompts:
                     self.custom_instance_prompts.extend(
-                        itertools.repeat(caption, repeats)
+                        itertools.repeat(caption, repeats),
                     )
         else:
             self.instance_data_root = Path(instance_data_root)
             if not self.instance_data_root.exists():
-                raise ValueError("Instance images root doesn't exists.")
+                msg = "Instance images root doesn't exists."
+                raise ValueError(msg)
 
             instance_images = [
                 Image.open(path) for path in list(Path(instance_data_root).iterdir())
@@ -1199,7 +1205,7 @@ class DreamBoothDataset(Dataset):
         self.crop_top_lefts = []
         self.pixel_values = []
         train_resize = transforms.Resize(
-            size, interpolation=transforms.InterpolationMode.BILINEAR
+            size, interpolation=transforms.InterpolationMode.BILINEAR,
         )
         train_crop = (
             transforms.CenterCrop(size) if center_crop else transforms.RandomCrop(size)
@@ -1209,14 +1215,14 @@ class DreamBoothDataset(Dataset):
             [
                 transforms.ToTensor(),
                 transforms.Normalize([0.5], [0.5]),
-            ]
+            ],
         )
         # if using B-LoRA for single image. do not use transformations
         single_image = len(self.instance_images) < 2
         for image in self.instance_images:
             if not single_image:
                 image = exif_transpose(image)
-            if not image.mode == "RGB":
+            if image.mode != "RGB":
                 image = image.convert("RGB")
             self.original_sizes.append((image.height, image.width))
             image = train_resize(image)
@@ -1230,7 +1236,7 @@ class DreamBoothDataset(Dataset):
                 image = train_crop(image)
             else:
                 y1, x1, h, w = train_crop.get_params(
-                    image, (args.resolution, args.resolution)
+                    image, (args.resolution, args.resolution),
                 )
                 image = crop(image, y1, x1, h, w)
             crop_top_left = (y1, x1)
@@ -1252,7 +1258,7 @@ class DreamBoothDataset(Dataset):
             self.class_images = [Image.open(path) for path in self.class_images_path]
             for image in self.class_images:
                 image = exif_transpose(image)
-                if not image.mode == "RGB":
+                if image.mode != "RGB":
                     image = image.convert("RGB")
                 self.original_sizes_class_imgs.append((image.height, image.width))
                 image = train_resize(image)
@@ -1265,7 +1271,7 @@ class DreamBoothDataset(Dataset):
                     image = train_crop(image)
                 else:
                     y1, x1, h, w = train_crop.get_params(
-                        image, (args.resolution, args.resolution)
+                        image, (args.resolution, args.resolution),
                     )
                     image = crop(image, y1, x1, h, w)
                 crop_top_left = (y1, x1)
@@ -1284,17 +1290,17 @@ class DreamBoothDataset(Dataset):
         self.image_transforms = transforms.Compose(
             [
                 transforms.Resize(
-                    size, interpolation=transforms.InterpolationMode.BILINEAR
+                    size, interpolation=transforms.InterpolationMode.BILINEAR,
                 ),
                 transforms.CenterCrop(size)
                 if center_crop
                 else transforms.RandomCrop(size),
                 transforms.ToTensor(),
                 transforms.Normalize([0.5], [0.5]),
-            ]
+            ],
         )
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self._length
 
     def __getitem__(self, index):
@@ -1352,23 +1358,22 @@ def collate_fn(examples, with_prior_preservation=False):
     pixel_values = torch.stack(pixel_values)
     pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
 
-    batch = {
+    return {
         "pixel_values": pixel_values,
         "prompts": prompts,
         "original_sizes": original_sizes,
         "crop_top_lefts": crop_top_lefts,
     }
-    return batch
 
 
 class PromptDataset(Dataset):
     """A simple dataset to prepare the prompts to generate class images on multiple GPUs."""
 
-    def __init__(self, prompt, num_samples):
+    def __init__(self, prompt, num_samples) -> None:
         self.prompt = prompt
         self.num_samples = num_samples
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.num_samples
 
     def __getitem__(self, index):
@@ -1387,13 +1392,12 @@ def tokenize_prompt(tokenizer, prompt, add_special_tokens=False):
         add_special_tokens=add_special_tokens,
         return_tensors="pt",
     )
-    text_input_ids = text_inputs.input_ids
-    return text_input_ids
+    return text_inputs.input_ids
 
 
 # Adapted from pipelines.StableDiffusionXLPipeline.encode_prompt
 def encode_prompt(
-    text_encoders, tokenizers, prompt, text_input_ids_list=None, clip_skip=None
+    text_encoders, tokenizers, prompt, text_input_ids_list=None, clip_skip=None,
 ):
     prompt_embeds_list = []
 
@@ -1427,28 +1431,33 @@ def encode_prompt(
     return prompt_embeds, pooled_prompt_embeds
 
 
-def main(args):
+def main(args) -> None:
     if args.report_to == "wandb" and args.hub_token is not None:
-        raise ValueError(
+        msg = (
             "You cannot use both --report_to=wandb and --hub_token due to a security risk of exposing your token."
             " Please use `huggingface-cli login` to authenticate with the Hub."
         )
+        raise ValueError(
+            msg,
+        )
 
     if args.do_edm_style_training and args.snr_gamma is not None:
+        msg = "Min-SNR formulation is not supported when conducting EDM-style training."
         raise ValueError(
-            "Min-SNR formulation is not supported when conducting EDM-style training."
+            msg,
         )
 
     if torch.backends.mps.is_available() and args.mixed_precision == "bf16":
         # due to pytorch#99272, MPS does not yet support bfloat16.
+        msg = "Mixed precision training with bfloat16 is not supported on MPS. Please use fp16 (recommended) or fp32 instead."
         raise ValueError(
-            "Mixed precision training with bfloat16 is not supported on MPS. Please use fp16 (recommended) or fp32 instead."
+            msg,
         )
 
     logging_dir = Path(args.output_dir, args.logging_dir)
 
     accelerator_project_config = ProjectConfiguration(
-        project_dir=args.output_dir, logging_dir=logging_dir
+        project_dir=args.output_dir, logging_dir=logging_dir,
     )
     kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
     accelerator = Accelerator(
@@ -1465,8 +1474,9 @@ def main(args):
 
     if args.report_to == "wandb":
         if not is_wandb_available():
+            msg = "Make sure to install wandb if you want to use it for logging during training."
             raise ImportError(
-                "Make sure to install wandb if you want to use it for logging during training."
+                msg,
             )
 
     # Make one log on every process with the configuration for debugging.
@@ -1520,7 +1530,7 @@ def main(args):
 
             sample_dataset = PromptDataset(args.class_prompt, num_new_images)
             sample_dataloader = torch.utils.data.DataLoader(
-                sample_dataset, batch_size=args.sample_batch_size
+                sample_dataset, batch_size=args.sample_batch_size,
             )
 
             sample_dataloader = accelerator.prepare(sample_dataloader)
@@ -1554,7 +1564,7 @@ def main(args):
         repo_id = None
         if args.push_to_hub:
             repo_id = create_repo(
-                repo_id=model_id, exist_ok=True, token=args.hub_token
+                repo_id=model_id, exist_ok=True, token=args.hub_token,
             ).repo_id
 
     # Load the tokenizers
@@ -1575,30 +1585,30 @@ def main(args):
 
     # import correct text encoder classes
     text_encoder_cls_one = import_model_class_from_model_name_or_path(
-        args.pretrained_model_name_or_path, args.revision
+        args.pretrained_model_name_or_path, args.revision,
     )
     text_encoder_cls_two = import_model_class_from_model_name_or_path(
-        args.pretrained_model_name_or_path, args.revision, subfolder="text_encoder_2"
+        args.pretrained_model_name_or_path, args.revision, subfolder="text_encoder_2",
     )
 
     # Load scheduler and models
     scheduler_type = determine_scheduler_type(
-        args.pretrained_model_name_or_path, args.revision
+        args.pretrained_model_name_or_path, args.revision,
     )
     if "EDM" in scheduler_type:
         args.do_edm_style_training = True
         noise_scheduler = EDMEulerScheduler.from_pretrained(
-            args.pretrained_model_name_or_path, subfolder="scheduler"
+            args.pretrained_model_name_or_path, subfolder="scheduler",
         )
         logger.info("Performing EDM-style training!")
     elif args.do_edm_style_training:
         noise_scheduler = EulerDiscreteScheduler.from_pretrained(
-            args.pretrained_model_name_or_path, subfolder="scheduler"
+            args.pretrained_model_name_or_path, subfolder="scheduler",
         )
         logger.info("Performing EDM-style training!")
     else:
         noise_scheduler = DDPMScheduler.from_pretrained(
-            args.pretrained_model_name_or_path, subfolder="scheduler"
+            args.pretrained_model_name_or_path, subfolder="scheduler",
         )
 
     text_encoder_one = text_encoder_cls_one.from_pretrained(
@@ -1655,20 +1665,19 @@ def main(args):
         # replace instances of --token_abstraction in --instance_prompt with the new tokens: "<si><si+1>" etc.
         for token_abs, token_replacement in token_abstraction_dict.items():
             args.instance_prompt = args.instance_prompt.replace(
-                token_abs, "".join(token_replacement)
+                token_abs, "".join(token_replacement),
             )
             if args.with_prior_preservation:
                 args.class_prompt = args.class_prompt.replace(
-                    token_abs, "".join(token_replacement)
+                    token_abs, "".join(token_replacement),
                 )
             if args.validation_prompt:
                 args.validation_prompt = args.validation_prompt.replace(
-                    token_abs, "".join(token_replacement)
+                    token_abs, "".join(token_replacement),
                 )
-                print("validation prompt:", args.validation_prompt)
         # initialize the new tokens for textual inversion
         embedding_handler = TokenEmbeddingsHandler(
-            [text_encoder_one, text_encoder_two], [tokenizer_one, tokenizer_two]
+            [text_encoder_one, text_encoder_two], [tokenizer_one, tokenizer_two],
         )
         inserting_toks = []
         for new_tok in token_abstraction_dict.values():
@@ -1691,8 +1700,9 @@ def main(args):
 
     if torch.backends.mps.is_available() and weight_dtype == torch.bfloat16:
         # due to pytorch#99272, MPS does not yet support bfloat16.
+        msg = "Mixed precision training with bfloat16 is not supported on MPS. Please use fp16 (recommended) or fp32 instead."
         raise ValueError(
-            "Mixed precision training with bfloat16 is not supported on MPS. Please use fp16 (recommended) or fp32 instead."
+            msg,
         )
 
     # Move unet, vae and text_encoder to device and cast to weight_dtype
@@ -1712,12 +1722,13 @@ def main(args):
             if xformers_version == version.parse("0.0.16"):
                 logger.warning(
                     "xFormers 0.0.16 cannot be used for training in some GPUs. If you observe problems during training, "
-                    "please update xFormers to at least 0.0.17. See https://huggingface.co/docs/diffusers/main/en/optimization/xformers for more details."
+                    "please update xFormers to at least 0.0.17. See https://huggingface.co/docs/diffusers/main/en/optimization/xformers for more details.",
                 )
             unet.enable_xformers_memory_efficient_attention()
         else:
+            msg = "xformers is not available. Make sure it is installed correctly"
             raise ValueError(
-                "xformers is not available. Make sure it is installed correctly"
+                msg,
             )
 
     if args.gradient_checkpointing:
@@ -1736,7 +1747,7 @@ def main(args):
         target_blocks_list = "".join(args.lora_unet_blocks.split()).split(",")
         logger.info(f"list of unet blocks to train: {target_blocks_list}")
         target_modules = get_unet_lora_target_modules(
-            unet, use_blora=False, target_blocks=target_blocks_list
+            unet, use_blora=False, target_blocks=target_blocks_list,
         )
     else:
         target_modules = ["to_k", "to_q", "to_v", "to_out.0"]
@@ -1787,11 +1798,10 @@ def main(args):
 
     def unwrap_model(model):
         model = accelerator.unwrap_model(model)
-        model = model._orig_mod if is_compiled_module(model) else model
-        return model
+        return model._orig_mod if is_compiled_module(model) else model
 
     # create custom saving & loading hooks so that `accelerator.save_state(...)` serializes in a nice format
-    def save_model_hook(models, weights, output_dir):
+    def save_model_hook(models, weights, output_dir) -> None:
         if accelerator.is_main_process:
             # there are only two options here. Either are just the unet attn processor layers
             # or there are the unet and text encoder atten layers
@@ -1802,24 +1812,25 @@ def main(args):
             for model in models:
                 if isinstance(model, type(unwrap_model(unet))):
                     unet_lora_layers_to_save = convert_state_dict_to_diffusers(
-                        get_peft_model_state_dict(model)
+                        get_peft_model_state_dict(model),
                     )
                 elif isinstance(model, type(unwrap_model(text_encoder_one))):
                     if args.train_text_encoder:
                         text_encoder_one_lora_layers_to_save = (
                             convert_state_dict_to_diffusers(
-                                get_peft_model_state_dict(model)
+                                get_peft_model_state_dict(model),
                             )
                         )
                 elif isinstance(model, type(unwrap_model(text_encoder_two))):
                     if args.train_text_encoder:
                         text_encoder_two_lora_layers_to_save = (
                             convert_state_dict_to_diffusers(
-                                get_peft_model_state_dict(model)
+                                get_peft_model_state_dict(model),
                             )
                         )
                 else:
-                    raise ValueError(f"unexpected save model: {model.__class__}")
+                    msg = f"unexpected save model: {model.__class__}"
+                    raise ValueError(msg)
 
                 # make sure to pop weight so that corresponding model is not saved again
                 weights.pop()
@@ -1832,10 +1843,10 @@ def main(args):
             )
         if args.train_text_encoder_ti:
             embedding_handler.save_embeddings(
-                f"{args.output_dir}/{Path(args.output_dir).name}_emb.safetensors"
+                f"{args.output_dir}/{Path(args.output_dir).name}_emb.safetensors",
             )
 
-    def load_model_hook(models, input_dir):
+    def load_model_hook(models, input_dir) -> None:
         unet_ = None
         text_encoder_one_ = None
         text_encoder_two_ = None
@@ -1850,7 +1861,8 @@ def main(args):
             elif isinstance(model, type(unwrap_model(text_encoder_two))):
                 text_encoder_two_ = model
             else:
-                raise ValueError(f"unexpected save model: {model.__class__}")
+                msg = f"unexpected save model: {model.__class__}"
+                raise ValueError(msg)
 
         lora_state_dict, network_alphas = (
             StableDiffusionLoraLoaderMixin.lora_state_dict(input_dir)
@@ -1863,7 +1875,7 @@ def main(args):
         }
         unet_state_dict = convert_unet_state_dict_to_peft(unet_state_dict)
         incompatible_keys = set_peft_model_state_dict(
-            unet_, unet_state_dict, adapter_name="default"
+            unet_, unet_state_dict, adapter_name="default",
         )
         if incompatible_keys is not None:
             # check only for unexpected keys
@@ -1871,13 +1883,13 @@ def main(args):
             if unexpected_keys:
                 logger.warning(
                     f"Loading adapter weights from state_dict led to unexpected keys not found in the model: "
-                    f" {unexpected_keys}. "
+                    f" {unexpected_keys}. ",
                 )
 
         if args.train_text_encoder:
             # Do we need to call `scale_lora_layers()` here?
             _set_state_dict_into_text_encoder(
-                lora_state_dict, prefix="text_encoder.", text_encoder=text_encoder_one_
+                lora_state_dict, prefix="text_encoder.", text_encoder=text_encoder_one_,
             )
 
             _set_state_dict_into_text_encoder(
@@ -1925,10 +1937,10 @@ def main(args):
 
     if args.train_text_encoder:
         text_lora_parameters_one = list(
-            filter(lambda p: p.requires_grad, text_encoder_one.parameters())
+            filter(lambda p: p.requires_grad, text_encoder_one.parameters()),
         )
         text_lora_parameters_two = list(
-            filter(lambda p: p.requires_grad, text_encoder_two.parameters())
+            filter(lambda p: p.requires_grad, text_encoder_two.parameters()),
         )
 
     # If neither --train_text_encoder nor --train_text_encoder_ti, text_encoders remain frozen during training
@@ -1967,14 +1979,14 @@ def main(args):
     if not (args.optimizer.lower() == "prodigy" or args.optimizer.lower() == "adamw"):
         logger.warning(
             f"Unsupported choice of optimizer: {args.optimizer}.Supported optimizers include [adamW, prodigy]."
-            "Defaulting to adamW"
+            "Defaulting to adamW",
         )
         args.optimizer = "adamw"
 
-    if args.use_8bit_adam and not args.optimizer.lower() == "adamw":
+    if args.use_8bit_adam and args.optimizer.lower() != "adamw":
         logger.warning(
             f"use_8bit_adam is ignored when optimizer is not set to 'AdamW'. Optimizer was "
-            f"set to {args.optimizer.lower()}"
+            f"set to {args.optimizer.lower()}",
         )
 
     if args.optimizer.lower() == "adamw":
@@ -1982,8 +1994,9 @@ def main(args):
             try:
                 import bitsandbytes as bnb
             except ImportError:
+                msg = "To use 8-bit Adam, please install the bitsandbytes library: `pip install bitsandbytes`."
                 raise ImportError(
-                    "To use 8-bit Adam, please install the bitsandbytes library: `pip install bitsandbytes`."
+                    msg,
                 )
 
             optimizer_class = bnb.optim.AdamW8bit
@@ -2001,21 +2014,22 @@ def main(args):
         try:
             import prodigyopt
         except ImportError:
+            msg = "To use Prodigy, please install the prodigyopt library: `pip install prodigyopt`"
             raise ImportError(
-                "To use Prodigy, please install the prodigyopt library: `pip install prodigyopt`"
+                msg,
             )
 
         optimizer_class = prodigyopt.Prodigy
 
         if args.learning_rate <= 0.1:
             logger.warning(
-                "Learning rate is too low. When using prodigy, it's generally better to set learning rate around 1.0"
+                "Learning rate is too low. When using prodigy, it's generally better to set learning rate around 1.0",
             )
         if args.train_text_encoder and args.text_encoder_lr:
             logger.warning(
                 f"Learning rates were provided both for the unet and the text encoder- e.g. text_encoder_lr:"
                 f" {args.text_encoder_lr} and learning_rate: {args.learning_rate}. "
-                f"When using prodigy only learning_rate is used as the initial learning rate."
+                f"When using prodigy only learning_rate is used as the initial learning rate.",
             )
             # changes the learning rate of text_encoder_parameters_one and text_encoder_parameters_two to be
             # --learning_rate
@@ -2067,8 +2081,7 @@ def main(args):
         target_size = (args.resolution, args.resolution)
         add_time_ids = list(original_size + crops_coords_top_left + target_size)
         add_time_ids = torch.tensor([add_time_ids])
-        add_time_ids = add_time_ids.to(accelerator.device, dtype=weight_dtype)
-        return add_time_ids
+        return add_time_ids.to(accelerator.device, dtype=weight_dtype)
 
     if not args.train_text_encoder:
         tokenizers = [tokenizer_one, tokenizer_two]
@@ -2077,7 +2090,7 @@ def main(args):
         def compute_text_embeddings(prompt, text_encoders, tokenizers, clip_skip):
             with torch.no_grad():
                 prompt_embeds, pooled_prompt_embeds = encode_prompt(
-                    text_encoders, tokenizers, prompt, clip_skip
+                    text_encoders, tokenizers, prompt, clip_skip,
                 )
                 prompt_embeds = prompt_embeds.to(accelerator.device)
                 pooled_prompt_embeds = pooled_prompt_embeds.to(accelerator.device)
@@ -2089,16 +2102,15 @@ def main(args):
     if freeze_text_encoder and not train_dataset.custom_instance_prompts:
         instance_prompt_hidden_states, instance_pooled_prompt_embeds = (
             compute_text_embeddings(
-                args.instance_prompt, text_encoders, tokenizers, args.clip_skip
+                args.instance_prompt, text_encoders, tokenizers, args.clip_skip,
             )
         )
 
     # Handle class prompt for prior-preservation.
-    if args.with_prior_preservation:
-        if freeze_text_encoder:
-            class_prompt_hidden_states, class_pooled_prompt_embeds = (
-                compute_text_embeddings(args.class_prompt, text_encoders, tokenizers)
-            )
+    if args.with_prior_preservation and freeze_text_encoder:
+        class_prompt_hidden_states, class_pooled_prompt_embeds = (
+            compute_text_embeddings(args.class_prompt, text_encoders, tokenizers)
+        )
 
     # Clear the memory here
     if freeze_text_encoder and not train_dataset.custom_instance_prompts:
@@ -2112,7 +2124,7 @@ def main(args):
     # have to pass them to the dataloader.
 
     # if --train_text_encoder_ti we need add_special_tokens to be True fo textual inversion
-    add_special_tokens = True if args.train_text_encoder_ti else False
+    add_special_tokens = bool(args.train_text_encoder_ti)
 
     if not train_dataset.custom_instance_prompts:
         if freeze_text_encoder:
@@ -2120,26 +2132,26 @@ def main(args):
             unet_add_text_embeds = instance_pooled_prompt_embeds
             if args.with_prior_preservation:
                 prompt_embeds = torch.cat(
-                    [prompt_embeds, class_prompt_hidden_states], dim=0
+                    [prompt_embeds, class_prompt_hidden_states], dim=0,
                 )
                 unet_add_text_embeds = torch.cat(
-                    [unet_add_text_embeds, class_pooled_prompt_embeds], dim=0
+                    [unet_add_text_embeds, class_pooled_prompt_embeds], dim=0,
                 )
         # if we're optimizing the text encoder (both if instance prompt is used for all images or custom prompts) we need to tokenize and encode the
         # batch prompts on all training steps
         else:
             tokens_one = tokenize_prompt(
-                tokenizer_one, args.instance_prompt, add_special_tokens
+                tokenizer_one, args.instance_prompt, add_special_tokens,
             )
             tokens_two = tokenize_prompt(
-                tokenizer_two, args.instance_prompt, add_special_tokens
+                tokenizer_two, args.instance_prompt, add_special_tokens,
             )
             if args.with_prior_preservation:
                 class_tokens_one = tokenize_prompt(
-                    tokenizer_one, args.class_prompt, add_special_tokens
+                    tokenizer_one, args.class_prompt, add_special_tokens,
                 )
                 class_tokens_two = tokenize_prompt(
-                    tokenizer_two, args.class_prompt, add_special_tokens
+                    tokenizer_two, args.class_prompt, add_special_tokens,
                 )
                 tokens_one = torch.cat([tokens_one, class_tokens_one], dim=0)
                 tokens_two = torch.cat([tokens_two, class_tokens_two], dim=0)
@@ -2149,7 +2161,7 @@ def main(args):
         for batch in tqdm(train_dataloader, desc="Caching latents"):
             with torch.no_grad():
                 batch["pixel_values"] = batch["pixel_values"].to(
-                    accelerator.device, non_blocking=True, dtype=torch.float32
+                    accelerator.device, non_blocking=True, dtype=torch.float32,
                 )
                 latents_cache.append(vae.encode(batch["pixel_values"]).latent_dist)
 
@@ -2163,10 +2175,10 @@ def main(args):
     num_warmup_steps_for_scheduler = args.lr_warmup_steps * accelerator.num_processes
     if args.max_train_steps is None:
         len_train_dataloader_after_sharding = math.ceil(
-            len(train_dataloader) / accelerator.num_processes
+            len(train_dataloader) / accelerator.num_processes,
         )
         num_update_steps_per_epoch = math.ceil(
-            len_train_dataloader_after_sharding / args.gradient_accumulation_steps
+            len_train_dataloader_after_sharding / args.gradient_accumulation_steps,
         )
         num_training_steps_for_scheduler = (
             args.num_train_epochs
@@ -2206,12 +2218,12 @@ def main(args):
         )
     else:
         unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-            unet, optimizer, train_dataloader, lr_scheduler
+            unet, optimizer, train_dataloader, lr_scheduler,
         )
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(
-        len(train_dataloader) / args.gradient_accumulation_steps
+        len(train_dataloader) / args.gradient_accumulation_steps,
     )
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
@@ -2222,7 +2234,7 @@ def main(args):
             logger.warning(
                 f"The length of the 'train_dataloader' after 'accelerator.prepare' ({len(train_dataloader)}) does not match "
                 f"the expected length ({len_train_dataloader_after_sharding}) when the learning rate scheduler was created. "
-                f"This inconsistency may result in the learning rate scheduler not functioning properly."
+                f"This inconsistency may result in the learning rate scheduler not functioning properly.",
             )
     # Afterwards we recalculate our number of training epochs
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
@@ -2250,7 +2262,7 @@ def main(args):
     logger.info(f"  Num Epochs = {args.num_train_epochs}")
     logger.info(f"  Instantaneous batch size per device = {args.train_batch_size}")
     logger.info(
-        f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}"
+        f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}",
     )
     logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
     logger.info(f"  Total optimization steps = {args.max_train_steps}")
@@ -2270,7 +2282,7 @@ def main(args):
 
         if path is None:
             accelerator.print(
-                f"Checkpoint '{args.resume_from_checkpoint}' does not exist. Starting a new training run."
+                f"Checkpoint '{args.resume_from_checkpoint}' does not exist. Starting a new training run.",
             )
             args.resume_from_checkpoint = None
             initial_global_step = 0
@@ -2286,7 +2298,7 @@ def main(args):
         initial_global_step = 0
 
     progress_bar = tqdm(
-        range(0, args.max_train_steps),
+        range(args.max_train_steps),
         initial=initial_global_step,
         desc="Steps",
         # Only show the progress bar once on each machine.
@@ -2307,11 +2319,11 @@ def main(args):
 
     if args.train_text_encoder:
         num_train_epochs_text_encoder = int(
-            args.train_text_encoder_frac * args.num_train_epochs
+            args.train_text_encoder_frac * args.num_train_epochs,
         )
     elif args.train_text_encoder_ti:  # args.train_text_encoder_ti
         num_train_epochs_text_encoder = int(
-            args.train_text_encoder_ti_frac * args.num_train_epochs
+            args.train_text_encoder_ti_frac * args.num_train_epochs,
         )
     # flag used for textual inversion
     pivoted = False
@@ -2320,7 +2332,6 @@ def main(args):
         # if performing any kind of optimization of text_encoder params
         if args.train_text_encoder or args.train_text_encoder_ti:
             if epoch == num_train_epochs_text_encoder:
-                print("PIVOT HALFWAY", epoch)
                 # stopping optimization of text_encoder params
                 # this flag is used to reset the optimizer to optimize only on unet params
                 pivoted = True
@@ -2332,10 +2343,10 @@ def main(args):
                 # set top parameter requires_grad = True for gradient checkpointing works
                 if args.train_text_encoder:
                     accelerator.unwrap_model(
-                        text_encoder_one
+                        text_encoder_one,
                     ).text_model.embeddings.requires_grad_(True)
                     accelerator.unwrap_model(
-                        text_encoder_two
+                        text_encoder_two,
                     ).text_model.embeddings.requires_grad_(True)
 
         for step, batch in enumerate(train_dataloader):
@@ -2351,15 +2362,15 @@ def main(args):
                 if train_dataset.custom_instance_prompts:
                     if freeze_text_encoder:
                         prompt_embeds, unet_add_text_embeds = compute_text_embeddings(
-                            prompts, text_encoders, tokenizers, args.clip_skip
+                            prompts, text_encoders, tokenizers, args.clip_skip,
                         )
 
                     else:
                         tokens_one = tokenize_prompt(
-                            tokenizer_one, prompts, add_special_tokens
+                            tokenizer_one, prompts, add_special_tokens,
                         )
                         tokens_two = tokenize_prompt(
-                            tokenizer_two, prompts, add_special_tokens
+                            tokenizer_two, prompts, add_special_tokens,
                         )
 
                 if args.cache_latents:
@@ -2374,10 +2385,10 @@ def main(args):
                         model_input = model_input.to(weight_dtype)
                 else:
                     latents_mean = latents_mean.to(
-                        device=model_input.device, dtype=model_input.dtype
+                        device=model_input.device, dtype=model_input.dtype,
                     )
                     latents_std = latents_std.to(
-                        device=model_input.device, dtype=model_input.dtype
+                        device=model_input.device, dtype=model_input.dtype,
                     )
                     model_input = (
                         (model_input - latents_mean)
@@ -2411,27 +2422,27 @@ def main(args):
                     # instead of discrete timesteps, so here we sample indices to get the noise levels
                     # from `scheduler.timesteps`
                     indices = torch.randint(
-                        0, noise_scheduler.config.num_train_timesteps, (bsz,)
+                        0, noise_scheduler.config.num_train_timesteps, (bsz,),
                     )
                     timesteps = noise_scheduler.timesteps[indices].to(
-                        device=model_input.device
+                        device=model_input.device,
                     )
 
                 # Add noise to the model input according to the noise magnitude at each timestep
                 # (this is the forward diffusion process)
                 noisy_model_input = noise_scheduler.add_noise(
-                    model_input, noise, timesteps
+                    model_input, noise, timesteps,
                 )
                 # For EDM-style training, we first obtain the sigmas based on the continuous timesteps.
                 # We then precondition the final model inputs based on these sigmas instead of the timesteps.
                 # Follow: Section 5 of https://arxiv.org/abs/2206.00364.
                 if args.do_edm_style_training:
                     sigmas = get_sigmas(
-                        timesteps, len(noisy_model_input.shape), noisy_model_input.dtype
+                        timesteps, len(noisy_model_input.shape), noisy_model_input.dtype,
                     )
                     if "EDM" in scheduler_type:
                         inp_noisy_latents = noise_scheduler.precondition_inputs(
-                            noisy_model_input, sigmas
+                            noisy_model_input, sigmas,
                         )
                     else:
                         inp_noisy_latents = noisy_model_input / ((sigmas**2 + 1) ** 0.5)
@@ -2441,9 +2452,9 @@ def main(args):
                     [
                         compute_time_ids(original_size=s, crops_coords_top_left=c)
                         for s, c in zip(
-                            batch["original_sizes"], batch["crop_top_lefts"]
+                            batch["original_sizes"], batch["crop_top_lefts"],
                         )
-                    ]
+                    ],
                 )
 
                 # Calculate the elements to repeat depending on the use of prior-preservation and custom captions.
@@ -2460,11 +2471,11 @@ def main(args):
                     unet_added_conditions = {
                         "time_ids": add_time_ids,
                         "text_embeds": unet_add_text_embeds.repeat(
-                            elems_to_repeat_text_embeds, 1
+                            elems_to_repeat_text_embeds, 1,
                         ),
                     }
                     prompt_embeds_input = prompt_embeds.repeat(
-                        elems_to_repeat_text_embeds, 1, 1
+                        elems_to_repeat_text_embeds, 1, 1,
                     )
                     model_pred = unet(
                         inp_noisy_latents
@@ -2487,12 +2498,12 @@ def main(args):
                     unet_added_conditions.update(
                         {
                             "text_embeds": pooled_prompt_embeds.repeat(
-                                elems_to_repeat_text_embeds, 1
-                            )
-                        }
+                                elems_to_repeat_text_embeds, 1,
+                            ),
+                        },
                     )
                     prompt_embeds_input = prompt_embeds.repeat(
-                        elems_to_repeat_text_embeds, 1, 1
+                        elems_to_repeat_text_embeds, 1, 1,
                     )
                     model_pred = unet(
                         inp_noisy_latents
@@ -2511,15 +2522,14 @@ def main(args):
                     # Follow: Section 5 of https://arxiv.org/abs/2206.00364.
                     if "EDM" in scheduler_type:
                         model_pred = noise_scheduler.precondition_outputs(
-                            noisy_model_input, model_pred, sigmas
+                            noisy_model_input, model_pred, sigmas,
                         )
-                    else:
-                        if noise_scheduler.config.prediction_type == "epsilon":
-                            model_pred = model_pred * (-sigmas) + noisy_model_input
-                        elif noise_scheduler.config.prediction_type == "v_prediction":
-                            model_pred = model_pred * (
-                                -sigmas / (sigmas**2 + 1) ** 0.5
-                            ) + (noisy_model_input / (sigmas**2 + 1))
+                    elif noise_scheduler.config.prediction_type == "epsilon":
+                        model_pred = model_pred * (-sigmas) + noisy_model_input
+                    elif noise_scheduler.config.prediction_type == "v_prediction":
+                        model_pred = model_pred * (
+                            -sigmas / (sigmas**2 + 1) ** 0.5
+                        ) + (noisy_model_input / (sigmas**2 + 1))
                     # We are not doing weighting here because it tends result in numerical problems.
                     # See: https://github.com/huggingface/diffusers/pull/7126#issuecomment-1968523051
                     # There might be other alternatives for weighting as well:
@@ -2537,8 +2547,9 @@ def main(args):
                         else noise_scheduler.get_velocity(model_input, noise, timesteps)
                     )
                 else:
+                    msg = f"Unknown prediction type {noise_scheduler.config.prediction_type}"
                     raise ValueError(
-                        f"Unknown prediction type {noise_scheduler.config.prediction_type}"
+                        msg,
                     )
 
                 if args.with_prior_preservation:
@@ -2575,7 +2586,7 @@ def main(args):
                         loss = loss.mean()
                     else:
                         loss = F.mse_loss(
-                            model_pred.float(), target.float(), reduction="mean"
+                            model_pred.float(), target.float(), reduction="mean",
                         )
                 else:
                     # Compute loss-weights as per Section 3.4 of https://arxiv.org/abs/2303.09556.
@@ -2606,7 +2617,7 @@ def main(args):
                         mse_loss_weights = base_weight
 
                     loss = F.mse_loss(
-                        model_pred.float(), target.float(), reduction="none"
+                        model_pred.float(), target.float(), reduction="none",
                     )
                     loss = (
                         loss.mean(dim=list(range(1, len(loss.shape))))
@@ -2652,7 +2663,7 @@ def main(args):
                                 d for d in checkpoints if d.startswith("checkpoint")
                             ]
                             checkpoints = sorted(
-                                checkpoints, key=lambda x: int(x.split("-")[1])
+                                checkpoints, key=lambda x: int(x.split("-")[1]),
                             )
 
                             # before we save the new checkpoint, we need to have at _most_ `checkpoints_total_limit - 1` checkpoints
@@ -2663,20 +2674,20 @@ def main(args):
                                 removing_checkpoints = checkpoints[0:num_to_remove]
 
                                 logger.info(
-                                    f"{len(checkpoints)} checkpoints already exist, removing {len(removing_checkpoints)} checkpoints"
+                                    f"{len(checkpoints)} checkpoints already exist, removing {len(removing_checkpoints)} checkpoints",
                                 )
                                 logger.info(
-                                    f"removing checkpoints: {', '.join(removing_checkpoints)}"
+                                    f"removing checkpoints: {', '.join(removing_checkpoints)}",
                                 )
 
                                 for removing_checkpoint in removing_checkpoints:
                                     removing_checkpoint = os.path.join(
-                                        args.output_dir, removing_checkpoint
+                                        args.output_dir, removing_checkpoint,
                                     )
                                     shutil.rmtree(removing_checkpoint)
 
                         save_path = os.path.join(
-                            args.output_dir, f"checkpoint-{global_step}"
+                            args.output_dir, f"checkpoint-{global_step}",
                         )
                         accelerator.save_state(save_path)
                         logger.info(f"Saved state to {save_path}")
@@ -2688,46 +2699,45 @@ def main(args):
             if global_step >= args.max_train_steps:
                 break
 
-        if accelerator.is_main_process:
-            if (
-                args.validation_prompt is not None
-                and epoch % args.validation_epochs == 0
-            ):
-                # create pipeline
-                if freeze_text_encoder:
-                    text_encoder_one = text_encoder_cls_one.from_pretrained(
-                        args.pretrained_model_name_or_path,
-                        subfolder="text_encoder",
-                        revision=args.revision,
-                        variant=args.variant,
-                    )
-                    text_encoder_two = text_encoder_cls_two.from_pretrained(
-                        args.pretrained_model_name_or_path,
-                        subfolder="text_encoder_2",
-                        revision=args.revision,
-                        variant=args.variant,
-                    )
-                pipeline = StableDiffusionXLPipeline.from_pretrained(
+        if accelerator.is_main_process and (
+            args.validation_prompt is not None
+            and epoch % args.validation_epochs == 0
+        ):
+            # create pipeline
+            if freeze_text_encoder:
+                text_encoder_one = text_encoder_cls_one.from_pretrained(
                     args.pretrained_model_name_or_path,
-                    vae=vae,
-                    tokenizer=tokenizer_one,
-                    tokenizer_2=tokenizer_two,
-                    text_encoder=accelerator.unwrap_model(text_encoder_one),
-                    text_encoder_2=accelerator.unwrap_model(text_encoder_two),
-                    unet=accelerator.unwrap_model(unet),
+                    subfolder="text_encoder",
                     revision=args.revision,
                     variant=args.variant,
-                    torch_dtype=weight_dtype,
                 )
-                pipeline_args = {"prompt": args.validation_prompt}
+                text_encoder_two = text_encoder_cls_two.from_pretrained(
+                    args.pretrained_model_name_or_path,
+                    subfolder="text_encoder_2",
+                    revision=args.revision,
+                    variant=args.variant,
+                )
+            pipeline = StableDiffusionXLPipeline.from_pretrained(
+                args.pretrained_model_name_or_path,
+                vae=vae,
+                tokenizer=tokenizer_one,
+                tokenizer_2=tokenizer_two,
+                text_encoder=accelerator.unwrap_model(text_encoder_one),
+                text_encoder_2=accelerator.unwrap_model(text_encoder_two),
+                unet=accelerator.unwrap_model(unet),
+                revision=args.revision,
+                variant=args.variant,
+                torch_dtype=weight_dtype,
+            )
+            pipeline_args = {"prompt": args.validation_prompt}
 
-                images = log_validation(
-                    pipeline,
-                    args,
-                    accelerator,
-                    pipeline_args,
-                    epoch,
-                )
+            images = log_validation(
+                pipeline,
+                args,
+                accelerator,
+                pipeline_args,
+                epoch,
+            )
 
     # Save the lora layers
     accelerator.wait_for_everyone()
@@ -2735,17 +2745,17 @@ def main(args):
         unet = unwrap_model(unet)
         unet = unet.to(torch.float32)
         unet_lora_layers = convert_state_dict_to_diffusers(
-            get_peft_model_state_dict(unet)
+            get_peft_model_state_dict(unet),
         )
 
         if args.train_text_encoder:
             text_encoder_one = unwrap_model(text_encoder_one)
             text_encoder_lora_layers = convert_state_dict_to_diffusers(
-                get_peft_model_state_dict(text_encoder_one.to(torch.float32))
+                get_peft_model_state_dict(text_encoder_one.to(torch.float32)),
             )
             text_encoder_two = unwrap_model(text_encoder_two)
             text_encoder_2_lora_layers = convert_state_dict_to_diffusers(
-                get_peft_model_state_dict(text_encoder_two.to(torch.float32))
+                get_peft_model_state_dict(text_encoder_two.to(torch.float32)),
             )
         else:
             text_encoder_lora_layers = None
@@ -2800,7 +2810,7 @@ def main(args):
 
         # Convert to WebUI format
         lora_state_dict = load_file(
-            f"{args.output_dir}/pytorch_lora_weights.safetensors"
+            f"{args.output_dir}/pytorch_lora_weights.safetensors",
         )
         peft_state_dict = convert_all_state_dict_to_peft(lora_state_dict)
         kohya_state_dict = convert_state_dict_to_kohya(peft_state_dict)

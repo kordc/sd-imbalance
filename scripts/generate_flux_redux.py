@@ -1,12 +1,13 @@
-import os
 import glob
+import os
 import random
-from PIL import Image
+
 from flux_redux_augment import FluxReduxAugment
+from PIL import Image
 from tqdm import tqdm
 
 
-def main():
+def main() -> None:
     input_dir = "./notebooks/cats"
     output_dir = "./notebooks/cats_redux"
     os.makedirs(output_dir, exist_ok=True)
@@ -20,7 +21,6 @@ def main():
     image_paths = sorted(image_paths)[:50]
 
     if not image_paths:
-        print("No cat images found in", input_dir)
         return
 
     num_aug_per_image = 99  # 50 images * 99 augmentations = 4950 new examples
@@ -38,8 +38,7 @@ def main():
     for img_path in tqdm(image_paths):
         try:
             img = Image.open(img_path).convert("RGB")
-        except Exception as e:
-            print(f"Error opening image {img_path}: {e}")
+        except Exception:
             continue
 
         base_name = os.path.splitext(os.path.basename(img_path))[0]
@@ -52,8 +51,6 @@ def main():
             out_path = os.path.join(output_dir, out_name)
             augmented_img.save(out_path)
             total += 1
-            print(f"Saved {out_path}")
-    print(f"Total augmented images saved: {total}")
 
 
 if __name__ == "__main__":

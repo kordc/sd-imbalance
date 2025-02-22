@@ -1,24 +1,23 @@
 import hydra
 import lightning as L
 import torch
-import wandb
 from lightning.pytorch.loggers import WandbLogger
 from omegaconf import DictConfig, OmegaConf
 
+import wandb
 from data import CIFAR10DataModule
 from model import ResNet18Model
 from utils import CIFAR10_CLASSES
 
 
 @hydra.main(config_path="config", config_name="config", version_base="1.2")
-def main(cfg: DictConfig):
+def main(cfg: DictConfig) -> None:
     L.seed_everything(cfg.seed, workers=True)
     data_module = CIFAR10DataModule(cfg)
     data_module.prepare_data()
     model = ResNet18Model(cfg, class_weights=data_module.class_weights)
 
     if cfg.get("checkpoint_path"):
-        print(f"Loading checkpoint from {cfg.checkpoint_path}")
         model = ResNet18Model.load_from_checkpoint(
             checkpoint_path=cfg.checkpoint_path,
             cfg=cfg,
@@ -31,6 +30,7 @@ def main(cfg: DictConfig):
 
     if cfg.get("visualize_feature_maps", False):
         import random
+
         import matplotlib.pyplot as plt
         import torchvision.transforms.functional as TF
         from PIL import Image
@@ -47,7 +47,7 @@ def main(cfg: DictConfig):
             i for i, target in enumerate(dataset.targets) if target == cat_label
         ]
         if not cat_indices:
-            print("No cat samples found in the dataset.")
+            pass
         else:
             chosen_index = random.choice(cat_indices)
             sample, label = dataset[chosen_index]
@@ -62,7 +62,7 @@ def main(cfg: DictConfig):
                 def unnormalize(tensor, mean, std):
                     # Create tensors for mean and std and apply unnormalization.
                     mean_tensor = torch.tensor(mean, device=tensor.device).view(
-                        -1, 1, 1
+                        -1, 1, 1,
                     )
                     std_tensor = torch.tensor(std, device=tensor.device).view(-1, 1, 1)
                     return tensor * std_tensor + mean_tensor
@@ -72,16 +72,16 @@ def main(cfg: DictConfig):
                 # Optionally convert to 8-bit values explicitly:
                 sample_img = TF.to_pil_image(sample)
                 sample_img_resized = sample_img.resize(
-                    (512, 512), resample=Image.BICUBIC
+                    (512, 512), resample=Image.BICUBIC,
                 )
             elif isinstance(sample, Image.Image):
                 sample_img = sample
             else:
-                raise TypeError("Unsupported image type for saving the sample.")
+                msg = "Unsupported image type for saving the sample."
+                raise TypeError(msg)
 
             sample_save_path = "sample_image.png"
             sample_img_resized.save(sample_save_path)
-            print(f"Sample image saved to {sample_save_path}")
 
             sample = dataset[chosen_index][0].unsqueeze(0).to(model.device)
             # Get feature maps from a designated layer (see method below)
@@ -97,7 +97,6 @@ def main(cfg: DictConfig):
             feature_maps_save_path = "feature_maps.png"
             plt.savefig(feature_maps_save_path, bbox_inches="tight")
             plt.close()
-            print(f"Feature maps saved to {feature_maps_save_path}")
         return
 
     # csv_logger = CSVLogger(save_dir="logs/", name="cifar10")

@@ -1,5 +1,6 @@
-from glob import glob
 import os
+import sys
+from glob import glob
 
 import lightning as L
 import numpy as np
@@ -12,8 +13,8 @@ from PIL import Image
 from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
 
-from utils import CIFAR10_CLASSES
 from scripts.flux_redux_augment import FluxReduxAugment
+from utils import CIFAR10_CLASSES
 
 
 class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
@@ -33,7 +34,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         add_extra_images=False,
         extra_images_dir="extra-images",
         max_extra_images=None,
-    ):
+    ) -> None:
         super().__init__(root=root, train=train, transform=transform, download=download)
         self.downsample_class = downsample_class
         self.downsample_ratio = downsample_ratio
@@ -53,14 +54,13 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         if self.add_extra_images:
             self._add_extra_images()
 
-    def _downsample(self):
+    def _downsample(self) -> None:
         targets = np.array(self.targets)
         selected_idx = np.arange(len(targets))
         if self.downsample_class is not None:
             self.downsample_class = CIFAR10_CLASSES[self.downsample_class]
 
         if self.downsample_class in targets:
-            print(f"Downsampling class {self.downsample_class}")
             # Get indices of all samples of the target class
             class_idx = selected_idx[targets == self.downsample_class]
             # Number of samples to keep for the target class
@@ -81,14 +81,12 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 + self.adasyn
                 > 1
             ):
+                msg = "Only one of naive_oversample, naive_undersample, smote, or adasyn can be True at a time."
                 raise ValueError(
-                    "Only one of naive_oversample, naive_undersample, smote, or adasyn can be True at a time.",
+                    msg,
                 )
 
             if self.naive_oversample:
-                print(
-                    f"Naive oversampling class {self.downsample_class} to original size using RandomOverSampler.",
-                )
                 ros = RandomOverSampler(sampling_strategy="auto", random_state=42)
                 # Reshape data and targets for use with imbalanced-learn
                 data_reshaped = self.data.reshape(
@@ -106,9 +104,6 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 self.targets = list(oversampled_targets)
 
             elif self.naive_undersample:
-                print(
-                    f"Naive undersampling all classes to match the size of downsampled class {self.downsample_class}.",
-                )
 
                 # Calculate the target number of samples (size of downsampled class)
                 target_size = keep_size  # Size of downsampled class
@@ -133,7 +128,6 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 self.targets = list(undersampled_targets)
 
             elif self.smote:
-                print(f"Applying SMOTE for oversampling class {self.downsample_class}.")
                 smote = SMOTE(sampling_strategy="auto", random_state=self.random_state)
                 data_reshaped = self.data.reshape(
                     self.data.shape[0],
@@ -150,9 +144,6 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 self.targets = list(smote_targets)
 
             elif self.adasyn:
-                print(
-                    f"Applying ADASYN for oversampling class {self.downsample_class}.",
-                )
                 adasyn = ADASYN(
                     sampling_strategy="auto",
                     random_state=self.random_state,
@@ -171,20 +162,15 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 self.data = adasyn_data
                 self.targets = list(adasyn_targets)
         else:
-            print(
-                f"Class {self.downsample_class} not found in the dataset. Skipping downsampling.",
-            )
+            pass
 
-    def _add_extra_images(self):
+    def _add_extra_images(self) -> None:
         """Adds extra images (all labeled as class 3, i.e. 'cat') from a directory
         into the training data. Optionally include only a random subset of them.
         """
         image_files = glob(os.path.join(self.extra_images_dir, "*.*"))  # jpg, png, etc.
         if not image_files:
-            print(
-                f"No images found under '{self.extra_images_dir}'. Skipping extra images."
-            )
-            exit()
+            sys.exit()
 
         # Shuffle if the user wants only a subset
         if self.max_extra_images is not None:
@@ -201,16 +187,12 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 new_images_list.append(arr)
 
         if not new_images_list:
-            print(f"No valid extra images found in {self.extra_images_dir}.")
             return
 
         # Stack them into shape (N, 32, 32, 3)
         new_images = np.stack(new_images_list, axis=0)
 
         # Append to existing dataset data
-        print(
-            f"Adding {len(new_images)} extra images as class {self.downsample_class} to the dataset."
-        )
         self.data = np.concatenate([self.data, new_images], axis=0)
 
         # Extend targets with class index 3 for each new image
@@ -218,7 +200,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
 
 
 class CIFAR10DataModule(L.LightningDataModule):
-    def __init__(self, cfg: DictConfig):
+    def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
         self.cfg = cfg
         self.transform = self.get_augmentations(cfg.augmentations)
@@ -240,7 +222,7 @@ class CIFAR10DataModule(L.LightningDataModule):
                 transform_list.append(getattr(transforms, aug_name)(**params))
         return transforms.Compose(transform_list)
 
-    def prepare_data(self):
+    def prepare_data(self) -> None:
         cifar10_train_path = os.path.join("./data", "cifar-10-batches-py")
         download_flag = not os.path.exists(cifar10_train_path)
         full_train_dataset = DownsampledCIFAR10(

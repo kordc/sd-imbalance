@@ -1,12 +1,14 @@
 import os
+
+from PIL import Image
+
 from data import DownsampledCIFAR10
 from utils import (
     CIFAR10_CLASSES,
 )  # Assumes CIFAR10_CLASSES maps "cat" to its label (e.g., 3)
-from PIL import Image
 
 
-def main():
+def main() -> None:
     # Configure dataset parameters.
     # For CIFAR10, there are 5,000 cat images in the training set.
     # To keep 50 cat images, we use a downsample ratio of 50/5000 = 0.01.
@@ -32,7 +34,6 @@ def main():
     cat_label = CIFAR10_CLASSES["cat"]  # For example, 3.
     cat_indices = [i for i, label in enumerate(dataset.targets) if label == cat_label]
 
-    print(f"Found {len(cat_indices)} cat images in the downsampled dataset.")
 
     # Create output directory for cat images.
     output_dir = "cats"
@@ -49,7 +50,6 @@ def main():
 
         save_path = os.path.join(output_dir, f"cat_{count + 1}.jpg")
         img_resized.save(save_path, format="JPEG")
-        print(f"Saved {save_path}")
 
 
 if __name__ == "__main__":

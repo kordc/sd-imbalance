@@ -1,12 +1,12 @@
 import random
+
 import torch
-from diffusers import FluxPriorReduxPipeline, FluxPipeline
+from diffusers import FluxPipeline, FluxPriorReduxPipeline
 from PIL import Image
 
 
 class FluxReduxAugment:
-    """
-    A custom torchvision-like transform that applies the Flux Redux augmentation
+    """A custom torchvision-like transform that applies the Flux Redux augmentation
     with a specified probability. Expects a PIL image as input and returns a PIL image.
     """
 
@@ -17,7 +17,7 @@ class FluxReduxAugment:
         seed: int = 0,
         device: str = "cuda",
         probability: float = 1.0,  # probability to apply the augmentation
-    ):
+    ) -> None:
         self.guidance_scale = guidance_scale
         self.num_inference_steps = num_inference_steps
         self.seed = seed
@@ -26,7 +26,7 @@ class FluxReduxAugment:
 
         # Load the Flux Redux pipelines once
         self.flux_prior_redux = FluxPriorReduxPipeline.from_pretrained(
-            "black-forest-labs/FLUX.1-Redux-dev", torch_dtype=torch.bfloat16
+            "black-forest-labs/FLUX.1-Redux-dev", torch_dtype=torch.bfloat16,
         ).to(self.device)
 
         self.flux_pipeline = FluxPipeline.from_pretrained(
@@ -37,9 +37,7 @@ class FluxReduxAugment:
         ).to(self.device)
 
     def __call__(self, image: Image.Image) -> Image.Image:
-        """
-        Apply the Flux Redux augmentation to the input PIL image with the given probability.
-        """
+        """Apply the Flux Redux augmentation to the input PIL image with the given probability."""
         # Decide whether to apply the augmentation.
         if random.random() > self.probability:
             # Skip augmentation; return the original image.

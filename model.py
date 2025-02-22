@@ -1,9 +1,10 @@
-import os
 import glob
+import os
+
 import lightning as L
 import torch
-import torchvision
 import torch.nn.functional as F
+import torchvision
 from omegaconf import DictConfig
 from sklearn.metrics import balanced_accuracy_score, confusion_matrix
 from torchmetrics import Accuracy
@@ -13,7 +14,7 @@ from utils import CIFAR10_CLASSES_REVERSE  # if needed
 
 
 class ResNet18Model(L.LightningModule):
-    def __init__(self, cfg: DictConfig, class_weights=None):
+    def __init__(self, cfg: DictConfig, class_weights=None) -> None:
         super().__init__()
         self.cfg = cfg
         self.model = torchvision.models.resnet18(num_classes=10)
@@ -39,13 +40,12 @@ class ResNet18Model(L.LightningModule):
         return self.model(x)
 
     def visualize_feature_maps(self, x):
-        """
-        Registers a forward hook on a chosen layer (here layer1)
+        """Registers a forward hook on a chosen layer (here layer1)
         and returns the feature maps produced for the input x.
         """
         features = []
 
-        def hook_fn(module, input, output):
+        def hook_fn(module, input, output) -> None:
             features.append(output)
 
         # Choose layer1 for visualization (can be changed as needed)
@@ -165,7 +165,7 @@ class ResNet18Model(L.LightningModule):
         self.log("test_loss", test_loss, on_step=False, on_epoch=True, prog_bar=False)
         return {"test_loss": test_loss}
 
-    def on_train_epoch_end(self):
+    def on_train_epoch_end(self) -> None:
         # Reset training accuracy metric.
         self.train_accuracy.reset()
 
@@ -174,7 +174,7 @@ class ResNet18Model(L.LightningModule):
         if self.cfg.get("dynamic_upsample", False):
             self.dynamic_upsample()
 
-    def on_validation_epoch_end(self):
+    def on_validation_epoch_end(self) -> None:
         for dataloader_idx, conf_matrix in self.val_confusion_matrices.items():
             name = "val" if dataloader_idx == 0 else "clean_val"
             per_class_accuracy = conf_matrix.diagonal() / conf_matrix.sum(axis=1)
@@ -190,7 +190,7 @@ class ResNet18Model(L.LightningModule):
         self.val_accuracy.reset()
         self.val_confusion_matrices = {}
 
-    def on_test_epoch_end(self):
+    def on_test_epoch_end(self) -> None:
         if self.test_confusion_matrix is not None:
             per_class_accuracy = (
                 self.test_confusion_matrix.diagonal()
@@ -222,9 +222,8 @@ class ResNet18Model(L.LightningModule):
         )
         return [optimizer], [scheduler]
 
-    def dynamic_upsample(self):
-        """
-        Dynamically upsamples the training data by adding candidate images with
+    def dynamic_upsample(self) -> None:
+        """Dynamically upsamples the training data by adding candidate images with
         the highest uncertainty. This method is called at the end of every training
         epoch (if enabled via self.cfg.dynamic_upsample) to add N (default 50)
         candidate examples to the training dataset.
@@ -244,7 +243,7 @@ class ResNet18Model(L.LightningModule):
         candidate_files = glob.glob(os.path.join(candidate_dir, "*.*"))
         if not candidate_files:
             self.print(
-                f"No candidate images found in '{candidate_dir}' for dynamic upsampling."
+                f"No candidate images found in '{candidate_dir}' for dynamic upsampling.",
             )
             return
 
@@ -253,7 +252,7 @@ class ResNet18Model(L.LightningModule):
             [
                 transforms.Resize((32, 32)),
                 transforms.ToTensor(),  # This converts to float and scales to [0, 1]
-            ]
+            ],
         )
 
         candidate_scores = []
@@ -284,7 +283,7 @@ class ResNet18Model(L.LightningModule):
         candidate_scores = np.array(candidate_scores)
         if len(candidate_scores) < num_to_add:
             self.print(
-                f"Only {len(candidate_scores)} candidate images available; adding all."
+                f"Only {len(candidate_scores)} candidate images available; adding all.",
             )
             top_indices = np.arange(len(candidate_scores))
         else:
@@ -313,7 +312,7 @@ class ResNet18Model(L.LightningModule):
             train_dataset.data = np.concatenate([train_dataset.data, new_data], axis=0)
             train_dataset.targets.extend([target_label] * len(selected_images))
             self.print(
-                f"Dynamic upsampling: added {len(selected_images)} images to the training dataset for class {target_label}."
+                f"Dynamic upsampling: added {len(selected_images)} images to the training dataset for class {target_label}.",
             )
         except Exception as e:
             self.print(f"Error during dynamic upsampling: {e}")

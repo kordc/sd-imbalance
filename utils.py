@@ -38,7 +38,7 @@ def evaluate_model(model, dataloader, device):
     return accuracy, balanced_acc
 
 
-def plot_metrics(log_dir):
+def plot_metrics(log_dir) -> None:
     # Load logged metrics from CSV
     metrics_file = f"{log_dir}/metrics.csv"
     metrics = pd.read_csv(metrics_file)

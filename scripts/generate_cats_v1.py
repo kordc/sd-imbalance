@@ -1,6 +1,5 @@
 # !pip install diffusers transformers torch tqdm sentencepiece accelerate ipywidgets
 # !huggingface-cli login
-import itertools
 import os
 import random
 
@@ -119,7 +118,6 @@ cat_breeds = [
     "York Chocolate",
 ]
 
-print(f"Cat breeds: {len(cat_breeds)}")
 
 # Expanded list of prepositions
 prepositions = ["on", "under", "next to", "beside", "in front of", "behind"]
@@ -320,11 +318,7 @@ furniture_or_outdoor = {
         "shed",
     ],
 }
-print(f"Prepositions: {len(furniture_or_outdoor)}")
 
-print(
-    f"Objects: {len(set(list(itertools.chain.from_iterable(furniture_or_outdoor.values()))))}",
-)
 
 # Directory to save generated images
 output_dir = "./generated_cats"
@@ -358,7 +352,6 @@ for i in tqdm(range(num_images), desc="Generating Images"):
         )
         image.save(output_path)
 
-    except Exception as e:
-        print(f"Failed to generate image {i}: {e}")
+    except Exception:
+        pass
 
-print(f"Generated {num_images} images and saved them in {output_dir}.")

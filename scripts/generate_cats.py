@@ -1,6 +1,5 @@
 # !pip install diffusers transformers torch tqdm sentencepiece accelerate ipywidgets
 # !huggingface-cli login
-import itertools
 import os
 import random
 
@@ -9,7 +8,7 @@ from diffusers import StableDiffusion3Pipeline
 from tqdm import tqdm
 
 
-def make_img(folder: str = "./tmp", num_inference_steps=4, guidance_scale=0.0):
+def make_img(folder: str = "./tmp", num_inference_steps=4, guidance_scale=0.0) -> None:
     # Directory to save generated images
     output_dir = folder
     os.makedirs(output_dir, exist_ok=True)
@@ -32,7 +31,6 @@ def make_img(folder: str = "./tmp", num_inference_steps=4, guidance_scale=0.0):
             "with soft lighting and a clear focus. The image has a shallow depth of field, "
             "emphasizing the cat in fine detail. 8k, cinematic, photorealistic"
         )
-        print(prompt)
         try:
             # Generate image
             result = pipe(
@@ -51,10 +49,9 @@ def make_img(folder: str = "./tmp", num_inference_steps=4, guidance_scale=0.0):
             )
             image.save(output_path)
 
-        except Exception as e:
-            print(f"Failed to generate image {i}: {e}")
+        except Exception:
+            pass
 
-    print(f"Generated {num_images} images and saved them in {output_dir}.")
 
 
 if __name__ == "__main__":
@@ -162,7 +159,6 @@ if __name__ == "__main__":
         "York Chocolate",
     ]
 
-    print(f"Cat breeds: {len(cat_breeds)}")
 
     # Expanded list of prepositions
     prepositions = ["on", "under", "next to", "beside", "in front of", "behind"]
@@ -385,10 +381,6 @@ if __name__ == "__main__":
         "eyes closed",
         "looking over its shoulder",
     ]
-    print(f"Prepositions: {len(furniture_or_outdoor)}")
-    print(
-        f"Objects: {len(set(list(itertools.chain.from_iterable(furniture_or_outdoor.values()))))}",
-    )
 
     pipe = StableDiffusion3Pipeline.from_pretrained(
         "stabilityai/stable-diffusion-3.5-large-turbo",
