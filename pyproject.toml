@@ -27,3 +27,6 @@ dependencies = [
     "transformers>=4.49.0",
     "wandb>=0.19.5",
 ]
+
+[tool.ruff]
+exclude = ["notebooks/*.ipynb"]
