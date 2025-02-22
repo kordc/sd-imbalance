@@ -22,9 +22,9 @@ def main(cfg: DictConfig):
         model = ResNet18Model.load_from_checkpoint(
             checkpoint_path=cfg.checkpoint_path,
             cfg=cfg,
-            class_weights=data_module.class_weights
+            class_weights=data_module.class_weights,
         )
-    
+
     if cfg.compile:
         model = torch.compile(model)
     torch.set_float32_matmul_precision("medium")
@@ -43,39 +43,46 @@ def main(cfg: DictConfig):
             dataset = data_module.train_dataset
 
         # Find indices for samples with the "cat" label.
-        cat_indices = [i for i, target in enumerate(dataset.targets) if target == cat_label]
+        cat_indices = [
+            i for i, target in enumerate(dataset.targets) if target == cat_label
+        ]
         if not cat_indices:
             print("No cat samples found in the dataset.")
         else:
             chosen_index = random.choice(cat_indices)
             sample, label = dataset[chosen_index]
-            
+
             # Save the original sample image.
             # If sample is a tensor, convert to PIL image.
             if torch.is_tensor(sample):
                 sample = sample.cpu()  # Ensure it's on CPU.
                 mean = [0.485, 0.456, 0.406]
                 std = [0.229, 0.224, 0.225]
+
                 def unnormalize(tensor, mean, std):
                     # Create tensors for mean and std and apply unnormalization.
-                    mean_tensor = torch.tensor(mean, device=tensor.device).view(-1, 1, 1)
+                    mean_tensor = torch.tensor(mean, device=tensor.device).view(
+                        -1, 1, 1
+                    )
                     std_tensor = torch.tensor(std, device=tensor.device).view(-1, 1, 1)
                     return tensor * std_tensor + mean_tensor
-    
+
                 sample = unnormalize(sample, mean, std)
                 sample = sample.clamp(0, 1)
                 # Optionally convert to 8-bit values explicitly:
                 sample_img = TF.to_pil_image(sample)
-                sample_img_resized = sample_img.resize((512, 512), resample=Image.BICUBIC)
+                sample_img_resized = sample_img.resize(
+                    (512, 512), resample=Image.BICUBIC
+                )
             elif isinstance(sample, Image.Image):
                 sample_img = sample
             else:
                 raise TypeError("Unsupported image type for saving the sample.")
-            
+
             sample_save_path = "sample_image.png"
             sample_img_resized.save(sample_save_path)
             print(f"Sample image saved to {sample_save_path}")
-            
+
             sample = dataset[chosen_index][0].unsqueeze(0).to(model.device)
             # Get feature maps from a designated layer (see method below)
             feature_maps = model.visualize_feature_maps(sample)
@@ -112,5 +119,6 @@ def main(cfg: DictConfig):
 
 if __name__ == "__main__":
     import torch.multiprocessing as mp
+
     mp.set_start_method("spawn", force=True)
     main()

@@ -9,7 +9,8 @@ from sklearn.metrics import balanced_accuracy_score, confusion_matrix
 from torchmetrics import Accuracy
 from torchvision import transforms
 
-from utils import CIFAR10_CLASSES_REVERSE, CIFAR10_CLASSES  # if needed
+from utils import CIFAR10_CLASSES_REVERSE  # if needed
+
 
 class ResNet18Model(L.LightningModule):
     def __init__(self, cfg: DictConfig, class_weights=None):
@@ -43,8 +44,10 @@ class ResNet18Model(L.LightningModule):
         and returns the feature maps produced for the input x.
         """
         features = []
+
         def hook_fn(module, input, output):
             features.append(output)
+
         # Choose layer1 for visualization (can be changed as needed)
         hook = self.model.layer1.register_forward_hook(hook_fn)
         self.eval()
@@ -86,7 +89,7 @@ class ResNet18Model(L.LightningModule):
         outputs = self(inputs)
         val_loss = self.criterion(outputs, labels)
 
-        name = 'val' if dataloader_idx == 0 else 'clean_val'
+        name = "val" if dataloader_idx == 0 else "clean_val"
 
         preds = torch.argmax(outputs, dim=1)
         self.val_accuracy(preds, labels)
@@ -95,10 +98,8 @@ class ResNet18Model(L.LightningModule):
             preds.cpu().numpy(),
         )
 
-       # Update confusion matrix for this dataloader.
-        current_conf = confusion_matrix(
-            labels.cpu(), preds.cpu(), labels=range(10)
-        )
+        # Update confusion matrix for this dataloader.
+        current_conf = confusion_matrix(labels.cpu(), preds.cpu(), labels=range(10))
         if dataloader_idx not in self.val_confusion_matrices:
             self.val_confusion_matrices[dataloader_idx] = current_conf
         else:
@@ -227,38 +228,40 @@ class ResNet18Model(L.LightningModule):
         the highest uncertainty. This method is called at the end of every training
         epoch (if enabled via self.cfg.dynamic_upsample) to add N (default 50)
         candidate examples to the training dataset.
-    
-        The acquisition score is computed as the entropy of the model's softmax 
+
+        The acquisition score is computed as the entropy of the model's softmax
         output (i.e. higher entropy indicates higher uncertainty).
-    
+
         Assumes candidate images are stored in self.cfg.extra_images_dir.
-        The new images are added with the label corresponding to the minority 
+        The new images are added with the label corresponding to the minority
         class (self.cfg.downsample_class).
         """
         import numpy as np
-        import torch.nn.functional as F
         from PIL import Image
-        from torchvision import transforms
-    
+
         num_to_add = self.cfg.get("num_dynamic_upsample", 50)
         candidate_dir = self.cfg.extra_images_dir
         candidate_files = glob.glob(os.path.join(candidate_dir, "*.*"))
         if not candidate_files:
-            self.print(f"No candidate images found in '{candidate_dir}' for dynamic upsampling.")
+            self.print(
+                f"No candidate images found in '{candidate_dir}' for dynamic upsampling."
+            )
             return
-    
+
         # Use a candidate transform that converts PIL images to float tensors
-        candidate_transform = transforms.Compose([
-            transforms.Resize((32, 32)),
-            transforms.ToTensor(),  # This converts to float and scales to [0, 1]
-        ])
-    
+        candidate_transform = transforms.Compose(
+            [
+                transforms.Resize((32, 32)),
+                transforms.ToTensor(),  # This converts to float and scales to [0, 1]
+            ]
+        )
+
         candidate_scores = []
         candidate_images = []
-    
+
         self.model.eval()
         device = self.device
-    
+
         with torch.no_grad():
             for fpath in candidate_files:
                 try:
@@ -268,7 +271,7 @@ class ResNet18Model(L.LightningModule):
                 except Exception as e:
                     self.print(f"Error loading image {fpath}: {e}")
                     continue
-    
+
                 image = image.unsqueeze(0).to(device)  # add batch dimension
                 output = self.model(image)
                 probs = F.softmax(output, dim=1)
@@ -277,33 +280,40 @@ class ResNet18Model(L.LightningModule):
                 candidate_scores.append(entropy)
                 # Also store the candidate image in numpy format (H x W x C)
                 candidate_images.append(np.array(pil_image.resize((32, 32))))
-    
+
         candidate_scores = np.array(candidate_scores)
         if len(candidate_scores) < num_to_add:
-            self.print(f"Only {len(candidate_scores)} candidate images available; adding all.")
+            self.print(
+                f"Only {len(candidate_scores)} candidate images available; adding all."
+            )
             top_indices = np.arange(len(candidate_scores))
         else:
             top_indices = np.argsort(candidate_scores)[-num_to_add:]
-    
+
         selected_images = [candidate_images[i] for i in top_indices]
-    
+
         # Determine the target label for these dynamic examples.
         if isinstance(self.cfg.downsample_class, str):
-            from utils import CIFAR10_CLASSES  # assuming this conversion exists in your utils
+            from utils import (
+                CIFAR10_CLASSES,
+            )  # assuming this conversion exists in your utils
+
             target_label = CIFAR10_CLASSES[self.cfg.downsample_class]
         else:
             target_label = self.cfg.downsample_class
-    
+
         try:
             train_dataset = self.trainer.datamodule.train_dataset.dataset
-        except Exception as e:
+        except Exception:
             self.print("Could not access training dataset from datamodule.")
             return
-    
+
         try:
             new_data = np.stack(selected_images, axis=0)
             train_dataset.data = np.concatenate([train_dataset.data, new_data], axis=0)
             train_dataset.targets.extend([target_label] * len(selected_images))
-            self.print(f"Dynamic upsampling: added {len(selected_images)} images to the training dataset for class {target_label}.")
+            self.print(
+                f"Dynamic upsampling: added {len(selected_images)} images to the training dataset for class {target_label}."
+            )
         except Exception as e:
             self.print(f"Error during dynamic upsampling: {e}")

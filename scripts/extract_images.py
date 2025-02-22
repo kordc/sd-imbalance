@@ -1,7 +1,10 @@
 import os
 from data import DownsampledCIFAR10
-from utils import CIFAR10_CLASSES  # Assumes CIFAR10_CLASSES maps "cat" to its label (e.g., 3)
+from utils import (
+    CIFAR10_CLASSES,
+)  # Assumes CIFAR10_CLASSES maps "cat" to its label (e.g., 3)
 from PIL import Image
+
 
 def main():
     # Configure dataset parameters.
@@ -44,9 +47,10 @@ def main():
         # Resize image to 512x512 pixels using high-quality resampling.
         img_resized = img.resize((512, 512), Image.LANCZOS)
 
-        save_path = os.path.join(output_dir, f"cat_{count+1}.jpg")
+        save_path = os.path.join(output_dir, f"cat_{count + 1}.jpg")
         img_resized.save(save_path, format="JPEG")
         print(f"Saved {save_path}")
+
 
 if __name__ == "__main__":
     main()

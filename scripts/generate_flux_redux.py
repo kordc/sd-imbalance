@@ -1,10 +1,10 @@
 import os
 import glob
 import random
-import torch
 from PIL import Image
 from flux_redux_augment import FluxReduxAugment
 from tqdm import tqdm
+
 
 def main():
     input_dir = "./notebooks/cats"
@@ -13,12 +13,12 @@ def main():
 
     # Look for common image file extensions.
     image_paths = []
-    for ext in ('*.jpg', '*.jpeg', '*.png'):
+    for ext in ("*.jpg", "*.jpeg", "*.png"):
         image_paths.extend(glob.glob(os.path.join(input_dir, ext)))
-    
+
     # Sort and limit to first 50 images.
     image_paths = sorted(image_paths)[:50]
-    
+
     if not image_paths:
         print("No cat images found in", input_dir)
         return
@@ -29,9 +29,9 @@ def main():
     flux_augment = FluxReduxAugment(
         guidance_scale=2.5,
         num_inference_steps=50,
-        seed=0,           # initial seed; will be updated for each augmentation
+        seed=0,  # initial seed; will be updated for each augmentation
         device="cuda",
-        probability=1.0   # always apply the augmentation
+        probability=1.0,  # always apply the augmentation
     )
 
     total = 0
@@ -54,6 +54,7 @@ def main():
             total += 1
             print(f"Saved {out_path}")
     print(f"Total augmented images saved: {total}")
+
 
 if __name__ == "__main__":
     main()
