@@ -294,13 +294,21 @@ class CIFAR10DataModule(L.LightningDataModule):
         )
 
     def val_dataloader(self):
-        return DataLoader(
+        val = DataLoader(
             self.val_dataset,
             batch_size=self.cfg.batch_size,
             shuffle=False,
             num_workers=self.cfg.num_workers,
             persistent_workers=True,
         )
+        test = DataLoader(
+            self.test_dataset,
+            batch_size=self.cfg.batch_size,
+            shuffle=False,
+            num_workers=self.cfg.num_workers,
+            persistent_workers=True,
+        )
+        return [val, test]
 
     def test_dataloader(self):
         return DataLoader(
