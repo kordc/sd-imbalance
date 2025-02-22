@@ -15,10 +15,10 @@ smote: false
 adasyn: false
 label_smoothing: false
 class_weighting: false
-add_extra_images: true
+add_extra_images: false
 extra_images_dir: /home/ubuntu/KarolMgr/sd-imbalance/simple_prompt_stable-diffusion-3.5-large-turbo # Remember to add full path
 max_extra_images: 4950
-name: active
+name: base
 epochs: 100
 compile: False
 batch_size: 128
