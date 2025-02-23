@@ -110,6 +110,7 @@ def main(cfg: DictConfig) -> None:
         devices="auto",
         logger=[wandb_logger],
         log_every_n_steps=1,
+        check_val_every_n_epoch=5,
     )
 
     trainer.fit(model, datamodule=data_module)
