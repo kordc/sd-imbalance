@@ -34,6 +34,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         add_extra_images=False,
         extra_images_dir="extra-images",
         max_extra_images=None,
+        keep_only_cat=False,
     ) -> None:
         super().__init__(root=root, train=train, transform=transform, download=download)
         self.downsample_class = downsample_class
@@ -47,6 +48,8 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         self.add_extra_images = add_extra_images
         self.extra_images_dir = extra_images_dir
         self.max_extra_images = max_extra_images
+
+        self.keep_only_cat = keep_only_cat
 
         if downsample_class is not None:
             self._downsample()
@@ -161,6 +164,13 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 adasyn_data = adasyn_data.reshape(-1, 32, 32, 3)
                 self.data = adasyn_data
                 self.targets = list(adasyn_targets)
+
+            updated_targets = np.array(self.targets)
+            if self.keep_only_cat:
+                mask = updated_targets == self.downsample_class
+                self.data = self.data[mask]
+                self.targets = [self.downsample_class] * len(self.data)
+
         else:
             pass
 
@@ -240,6 +250,7 @@ class CIFAR10DataModule(L.LightningDataModule):
             add_extra_images=self.cfg.add_extra_images,
             extra_images_dir=self.cfg.extra_images_dir,
             max_extra_images=self.cfg.max_extra_images,
+            keep_only_cat=self.cfg.keep_only_cat,
         )
         self.test_dataset = torchvision.datasets.CIFAR10(
             root="./data",
