@@ -1,18 +1,31 @@
-# !pip install diffusers transformers torch tqdm sentencepiece accelerate ipywidgets
-# !huggingface-cli login
-import os
+import numpy as np
 import random
-
 import torch
-from diffusers import StableDiffusion3Pipeline
 from tqdm import tqdm
+import os
 
-# pipe = DiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0", torch_dtype=torch.float16, use_safetensors=True, variant="fp16")
-pipe = StableDiffusion3Pipeline.from_pretrained(
-    "stabilityai/stable-diffusion-3.5-large-turbo",
-    torch_dtype=torch.bfloat16,
-)
-pipe = pipe.to("cuda")
+
+def set_seeds(seed=42):
+    """Fix all possible seeds to ensure reproducibility.
+    :param seed: The seed value to be set for all libraries.
+    """
+    # Python random module
+    random.seed(seed)
+    # NumPy
+    np.random.seed(seed)
+    # PyTorch
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # If using multi-GPU
+    torch.backends.cudnn.deterministic = True  # Ensures deterministic behavior
+    torch.backends.cudnn.benchmark = False  # Disables optimizations for reproducibility
+    # Environment variable for other libraries or hash-based operations
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+
+# Example usage
+set_seeds(42)
+
 
 # Expanded list of cat breeds
 cat_breeds = [
@@ -318,39 +331,97 @@ furniture_or_outdoor = {
         "shed",
     ],
 }
+camera_angles = [
+    "a photo taken from above",
+    "a photo taken from below",
+    "a side-view photo",
+    "a front-facing photo",
+    "a photo taken from behind",
+]
+
+# List of gaze directions
+gaze_directions = [
+    "looking straight ahead",
+    "looking up",
+    "looking down",
+    "looking to the left",
+    "looking to the right",
+    "looking up and to the left",
+    "looking up and to the right",
+    "looking down and to the left",
+    "looking down and to the right",
+    "eyes closed",
+    "looking over its shoulder",
+]
 
 
-# Directory to save generated images
-output_dir = "./generated_cats"
-os.makedirs(output_dir, exist_ok=True)
+def make_img(
+    folder: str = "./tmp",
+    num_inference_steps=25,
+    guidance_scale=0.0,
+    num_images=4,
+    pipe=None,
+):
+    # Directory to save generated images
+    output_dir = folder
+    os.makedirs(output_dir, exist_ok=True)
+    set_seeds(42)
+    # Generate synthetic images
+    num_images = num_images
+    for i in tqdm(range(num_images), desc="Generating Images"):
+        # Randomly select components for the prompt
+        # breed = random.choice(cat_breeds)
+        preposition = random.choice(prepositions)
+        furniture = random.choice(furniture_or_outdoor[preposition])
+        random.choice(camera_angles)
+        random.choice(gaze_directions)
 
-# Generate synthetic images
-num_images = 73200
-for i in tqdm(range(num_images), desc="Generating Images"):
-    # Randomly select components for the prompt
-    breed = random.choice(cat_breeds)
-    preposition = random.choice(prepositions)
-    furniture = random.choice(furniture_or_outdoor[preposition])
+        # Construct the prompt
+        prompt = f"Realistic image of a cat sitting {preposition} a {furniture}"
+        print(prompt)
+        pipe.to(torch.bfloat16)
 
-    # Construct the prompt
-    prompt = f"A photorealistic, sharp, and highly detailed image of a {breed} cat {preposition} the {furniture}. The cat has realistic fur textures, intricate details, and sharp features, with soft lighting and a clear focus. The image has a shallow depth of field, emphasizing the cat in fine detail."
+        try:
+            # Generate image
+            result = pipe(
+                prompt,
+                num_inference_steps=num_inference_steps,
+                cross_attention_kwargs={"scale": 1.0},
+                guidance_scale=guidance_scale,
+                width=512,
+                height=512,
+            )
+            image = result.images[0]  # Get the first image from the list
 
-    # Generate the image using StableDiffusionXL
-    try:
-        # Generate image
-        result = pipe(
-            prompt,
-            num_inference_steps=4,
-            guidance_scale=0.0,
-        )
-        image = result.images[0]  # Get the first image from the list
+            # Save the generated image
+            output_path = os.path.join(
+                output_dir,
+                f"{i:05d}_cat_{preposition}_{furniture}.png",
+            )
+            image.save(output_path)
 
-        # Save the generated image
-        output_path = os.path.join(
-            output_dir,
-            f"{i:05d}_cat_{breed}_{preposition}_{furniture}.png",
-        )
-        image.save(output_path)
+        except Exception as e:
+            print(f"Failed to generate image {i}: {e}")
 
-    except Exception:
-        pass
+    print(f"Generated {num_images} images and saved them in {output_dir}.")
+
+
+if __name__ == "__main__":
+    import torch
+    from diffusers import DiffusionPipeline
+    from huggingface_hub import whoami
+    from slugify import slugify
+    from pathlib import Path
+
+    pipe = DiffusionPipeline.from_pretrained(
+        "stabilityai/stable-diffusion-xl-base-1.0",
+        torch_dtype=torch.float16,
+        variant="fp16",
+    ).to("cuda")
+
+    username = whoami(token=Path("/root/.cache/huggingface/"))["name"]
+    output_dir = slugify("cifar10cats")
+    repo_id = f"{username}/{output_dir}"
+    pipe.load_lora_weights(repo_id, weight_name="pytorch_lora_weights.safetensors")
+
+    make_img("again_blurry", num_images=10000, pipe=pipe)

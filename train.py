@@ -62,7 +62,9 @@ def main(cfg: DictConfig) -> None:
                 def unnormalize(tensor, mean, std):
                     # Create tensors for mean and std and apply unnormalization.
                     mean_tensor = torch.tensor(mean, device=tensor.device).view(
-                        -1, 1, 1,
+                        -1,
+                        1,
+                        1,
                     )
                     std_tensor = torch.tensor(std, device=tensor.device).view(-1, 1, 1)
                     return tensor * std_tensor + mean_tensor
@@ -72,7 +74,8 @@ def main(cfg: DictConfig) -> None:
                 # Optionally convert to 8-bit values explicitly:
                 sample_img = TF.to_pil_image(sample)
                 sample_img_resized = sample_img.resize(
-                    (512, 512), resample=Image.BICUBIC,
+                    (512, 512),
+                    resample=Image.BICUBIC,
                 )
             elif isinstance(sample, Image.Image):
                 sample_img = sample

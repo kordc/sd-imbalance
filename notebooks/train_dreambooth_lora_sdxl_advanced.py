@@ -133,7 +133,9 @@ def save_model_card(
         """
     embeddings_filename = f"{repo_folder}_emb"
     instance_prompt_webui = re.sub(
-        r"<s\d+>", "", re.sub(r"<s\d+>", embeddings_filename, instance_prompt, count=1),
+        r"<s\d+>",
+        "",
+        re.sub(r"<s\d+>", embeddings_filename, instance_prompt, count=1),
     )
     ti_keys = ", ".join(
         f'"{match}"' for match in re.findall(r"<s\d+>", instance_prompt)
@@ -274,7 +276,8 @@ def log_validation(
             scheduler_args["variance_type"] = variance_type
 
         pipeline.scheduler = DPMSolverMultistepScheduler.from_config(
-            pipeline.scheduler.config, **scheduler_args,
+            pipeline.scheduler.config,
+            **scheduler_args,
         )
 
     pipeline = pipeline.to(accelerator.device)
@@ -325,10 +328,14 @@ def log_validation(
 
 
 def import_model_class_from_model_name_or_path(
-    pretrained_model_name_or_path: str, revision: str, subfolder: str = "text_encoder",
+    pretrained_model_name_or_path: str,
+    revision: str,
+    subfolder: str = "text_encoder",
 ):
     text_encoder_config = PretrainedConfig.from_pretrained(
-        pretrained_model_name_or_path, subfolder=subfolder, revision=revision,
+        pretrained_model_name_or_path,
+        subfolder=subfolder,
+        revision=revision,
     )
     model_class = text_encoder_config.architectures[0]
 
@@ -523,7 +530,10 @@ def parse_args(input_args=None):
         help="The output directory where the model predictions and checkpoints will be written.",
     )
     parser.add_argument(
-        "--seed", type=int, default=None, help="A seed for reproducible training.",
+        "--seed",
+        type=int,
+        default=None,
+        help="A seed for reproducible training.",
     )
     parser.add_argument(
         "--resolution",
@@ -770,7 +780,10 @@ def parse_args(input_args=None):
         "Ignored if optimizer is adamW",
     )
     parser.add_argument(
-        "--max_grad_norm", default=1.0, type=float, help="Max gradient norm.",
+        "--max_grad_norm",
+        default=1.0,
+        type=float,
+        help="Max gradient norm.",
     )
     parser.add_argument(
         "--push_to_hub",
@@ -848,7 +861,10 @@ def parse_args(input_args=None):
         help="Whether or not to use xformers.",
     )
     parser.add_argument(
-        "--noise_offset", type=float, default=0, help="The scale of noise offset.",
+        "--noise_offset",
+        type=float,
+        default=0,
+        help="The scale of noise offset.",
     )
     parser.add_argument(
         "--rank",
@@ -916,7 +932,8 @@ def parse_args(input_args=None):
     if args.use_blora and args.lora_unet_blocks:
         warnings.warn(
             "You specified both `--use_blora` and `--lora_unet_blocks`, for B-LoRA training, target unet blocks are: `unet.up_blocks.0.attentions.0` and `unet.up_blocks.0.attentions.1`. "
-            "If you wish to target different U-net blocks, don't enable `--use_blora`", stacklevel=2,
+            "If you wish to target different U-net blocks, don't enable `--use_blora`",
+            stacklevel=2,
         )
 
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
@@ -934,11 +951,13 @@ def parse_args(input_args=None):
         # logger is not available yet
         if args.class_data_dir is not None:
             warnings.warn(
-                "You need not use --class_data_dir without --with_prior_preservation.", stacklevel=2,
+                "You need not use --class_data_dir without --with_prior_preservation.",
+                stacklevel=2,
             )
         if args.class_prompt is not None:
             warnings.warn(
-                "You need not use --class_prompt without --with_prior_preservation.", stacklevel=2,
+                "You need not use --class_prompt without --with_prior_preservation.",
+                stacklevel=2,
             )
 
     return args
@@ -1014,12 +1033,12 @@ class TokenEmbeddingsHandler:
                 text_encoder.text_model.embeddings.token_embedding.weight.data.std()
             )
 
-
             text_encoder.text_model.embeddings.token_embedding.weight.data[
                 self.train_ids
             ] = (
                 torch.randn(
-                    len(self.train_ids), text_encoder.text_model.config.hidden_size,
+                    len(self.train_ids),
+                    text_encoder.text_model.config.hidden_size,
                 )
                 .to(device=self.device)
                 .to(dtype=self.dtype)
@@ -1034,7 +1053,6 @@ class TokenEmbeddingsHandler:
             inu[self.train_ids] = False
 
             self.embeddings_settings[f"index_no_updates_{idx}"] = inu
-
 
             idx += 1
 
@@ -1205,7 +1223,8 @@ class DreamBoothDataset(Dataset):
         self.crop_top_lefts = []
         self.pixel_values = []
         train_resize = transforms.Resize(
-            size, interpolation=transforms.InterpolationMode.BILINEAR,
+            size,
+            interpolation=transforms.InterpolationMode.BILINEAR,
         )
         train_crop = (
             transforms.CenterCrop(size) if center_crop else transforms.RandomCrop(size)
@@ -1236,7 +1255,8 @@ class DreamBoothDataset(Dataset):
                 image = train_crop(image)
             else:
                 y1, x1, h, w = train_crop.get_params(
-                    image, (args.resolution, args.resolution),
+                    image,
+                    (args.resolution, args.resolution),
                 )
                 image = crop(image, y1, x1, h, w)
             crop_top_left = (y1, x1)
@@ -1271,7 +1291,8 @@ class DreamBoothDataset(Dataset):
                     image = train_crop(image)
                 else:
                     y1, x1, h, w = train_crop.get_params(
-                        image, (args.resolution, args.resolution),
+                        image,
+                        (args.resolution, args.resolution),
                     )
                     image = crop(image, y1, x1, h, w)
                 crop_top_left = (y1, x1)
@@ -1290,7 +1311,8 @@ class DreamBoothDataset(Dataset):
         self.image_transforms = transforms.Compose(
             [
                 transforms.Resize(
-                    size, interpolation=transforms.InterpolationMode.BILINEAR,
+                    size,
+                    interpolation=transforms.InterpolationMode.BILINEAR,
                 ),
                 transforms.CenterCrop(size)
                 if center_crop
@@ -1397,7 +1419,11 @@ def tokenize_prompt(tokenizer, prompt, add_special_tokens=False):
 
 # Adapted from pipelines.StableDiffusionXLPipeline.encode_prompt
 def encode_prompt(
-    text_encoders, tokenizers, prompt, text_input_ids_list=None, clip_skip=None,
+    text_encoders,
+    tokenizers,
+    prompt,
+    text_input_ids_list=None,
+    clip_skip=None,
 ):
     prompt_embeds_list = []
 
@@ -1457,7 +1483,8 @@ def main(args) -> None:
     logging_dir = Path(args.output_dir, args.logging_dir)
 
     accelerator_project_config = ProjectConfiguration(
-        project_dir=args.output_dir, logging_dir=logging_dir,
+        project_dir=args.output_dir,
+        logging_dir=logging_dir,
     )
     kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
     accelerator = Accelerator(
@@ -1530,7 +1557,8 @@ def main(args) -> None:
 
             sample_dataset = PromptDataset(args.class_prompt, num_new_images)
             sample_dataloader = torch.utils.data.DataLoader(
-                sample_dataset, batch_size=args.sample_batch_size,
+                sample_dataset,
+                batch_size=args.sample_batch_size,
             )
 
             sample_dataloader = accelerator.prepare(sample_dataloader)
@@ -1564,7 +1592,9 @@ def main(args) -> None:
         repo_id = None
         if args.push_to_hub:
             repo_id = create_repo(
-                repo_id=model_id, exist_ok=True, token=args.hub_token,
+                repo_id=model_id,
+                exist_ok=True,
+                token=args.hub_token,
             ).repo_id
 
     # Load the tokenizers
@@ -1585,30 +1615,37 @@ def main(args) -> None:
 
     # import correct text encoder classes
     text_encoder_cls_one = import_model_class_from_model_name_or_path(
-        args.pretrained_model_name_or_path, args.revision,
+        args.pretrained_model_name_or_path,
+        args.revision,
     )
     text_encoder_cls_two = import_model_class_from_model_name_or_path(
-        args.pretrained_model_name_or_path, args.revision, subfolder="text_encoder_2",
+        args.pretrained_model_name_or_path,
+        args.revision,
+        subfolder="text_encoder_2",
     )
 
     # Load scheduler and models
     scheduler_type = determine_scheduler_type(
-        args.pretrained_model_name_or_path, args.revision,
+        args.pretrained_model_name_or_path,
+        args.revision,
     )
     if "EDM" in scheduler_type:
         args.do_edm_style_training = True
         noise_scheduler = EDMEulerScheduler.from_pretrained(
-            args.pretrained_model_name_or_path, subfolder="scheduler",
+            args.pretrained_model_name_or_path,
+            subfolder="scheduler",
         )
         logger.info("Performing EDM-style training!")
     elif args.do_edm_style_training:
         noise_scheduler = EulerDiscreteScheduler.from_pretrained(
-            args.pretrained_model_name_or_path, subfolder="scheduler",
+            args.pretrained_model_name_or_path,
+            subfolder="scheduler",
         )
         logger.info("Performing EDM-style training!")
     else:
         noise_scheduler = DDPMScheduler.from_pretrained(
-            args.pretrained_model_name_or_path, subfolder="scheduler",
+            args.pretrained_model_name_or_path,
+            subfolder="scheduler",
         )
 
     text_encoder_one = text_encoder_cls_one.from_pretrained(
@@ -1665,19 +1702,23 @@ def main(args) -> None:
         # replace instances of --token_abstraction in --instance_prompt with the new tokens: "<si><si+1>" etc.
         for token_abs, token_replacement in token_abstraction_dict.items():
             args.instance_prompt = args.instance_prompt.replace(
-                token_abs, "".join(token_replacement),
+                token_abs,
+                "".join(token_replacement),
             )
             if args.with_prior_preservation:
                 args.class_prompt = args.class_prompt.replace(
-                    token_abs, "".join(token_replacement),
+                    token_abs,
+                    "".join(token_replacement),
                 )
             if args.validation_prompt:
                 args.validation_prompt = args.validation_prompt.replace(
-                    token_abs, "".join(token_replacement),
+                    token_abs,
+                    "".join(token_replacement),
                 )
         # initialize the new tokens for textual inversion
         embedding_handler = TokenEmbeddingsHandler(
-            [text_encoder_one, text_encoder_two], [tokenizer_one, tokenizer_two],
+            [text_encoder_one, text_encoder_two],
+            [tokenizer_one, tokenizer_two],
         )
         inserting_toks = []
         for new_tok in token_abstraction_dict.values():
@@ -1747,7 +1788,9 @@ def main(args) -> None:
         target_blocks_list = "".join(args.lora_unet_blocks.split()).split(",")
         logger.info(f"list of unet blocks to train: {target_blocks_list}")
         target_modules = get_unet_lora_target_modules(
-            unet, use_blora=False, target_blocks=target_blocks_list,
+            unet,
+            use_blora=False,
+            target_blocks=target_blocks_list,
         )
     else:
         target_modules = ["to_k", "to_q", "to_v", "to_out.0"]
@@ -1875,7 +1918,9 @@ def main(args) -> None:
         }
         unet_state_dict = convert_unet_state_dict_to_peft(unet_state_dict)
         incompatible_keys = set_peft_model_state_dict(
-            unet_, unet_state_dict, adapter_name="default",
+            unet_,
+            unet_state_dict,
+            adapter_name="default",
         )
         if incompatible_keys is not None:
             # check only for unexpected keys
@@ -1889,7 +1934,9 @@ def main(args) -> None:
         if args.train_text_encoder:
             # Do we need to call `scale_lora_layers()` here?
             _set_state_dict_into_text_encoder(
-                lora_state_dict, prefix="text_encoder.", text_encoder=text_encoder_one_,
+                lora_state_dict,
+                prefix="text_encoder.",
+                text_encoder=text_encoder_one_,
             )
 
             _set_state_dict_into_text_encoder(
@@ -2090,7 +2137,10 @@ def main(args) -> None:
         def compute_text_embeddings(prompt, text_encoders, tokenizers, clip_skip):
             with torch.no_grad():
                 prompt_embeds, pooled_prompt_embeds = encode_prompt(
-                    text_encoders, tokenizers, prompt, clip_skip,
+                    text_encoders,
+                    tokenizers,
+                    prompt,
+                    clip_skip,
                 )
                 prompt_embeds = prompt_embeds.to(accelerator.device)
                 pooled_prompt_embeds = pooled_prompt_embeds.to(accelerator.device)
@@ -2102,7 +2152,10 @@ def main(args) -> None:
     if freeze_text_encoder and not train_dataset.custom_instance_prompts:
         instance_prompt_hidden_states, instance_pooled_prompt_embeds = (
             compute_text_embeddings(
-                args.instance_prompt, text_encoders, tokenizers, args.clip_skip,
+                args.instance_prompt,
+                text_encoders,
+                tokenizers,
+                args.clip_skip,
             )
         )
 
@@ -2132,26 +2185,36 @@ def main(args) -> None:
             unet_add_text_embeds = instance_pooled_prompt_embeds
             if args.with_prior_preservation:
                 prompt_embeds = torch.cat(
-                    [prompt_embeds, class_prompt_hidden_states], dim=0,
+                    [prompt_embeds, class_prompt_hidden_states],
+                    dim=0,
                 )
                 unet_add_text_embeds = torch.cat(
-                    [unet_add_text_embeds, class_pooled_prompt_embeds], dim=0,
+                    [unet_add_text_embeds, class_pooled_prompt_embeds],
+                    dim=0,
                 )
         # if we're optimizing the text encoder (both if instance prompt is used for all images or custom prompts) we need to tokenize and encode the
         # batch prompts on all training steps
         else:
             tokens_one = tokenize_prompt(
-                tokenizer_one, args.instance_prompt, add_special_tokens,
+                tokenizer_one,
+                args.instance_prompt,
+                add_special_tokens,
             )
             tokens_two = tokenize_prompt(
-                tokenizer_two, args.instance_prompt, add_special_tokens,
+                tokenizer_two,
+                args.instance_prompt,
+                add_special_tokens,
             )
             if args.with_prior_preservation:
                 class_tokens_one = tokenize_prompt(
-                    tokenizer_one, args.class_prompt, add_special_tokens,
+                    tokenizer_one,
+                    args.class_prompt,
+                    add_special_tokens,
                 )
                 class_tokens_two = tokenize_prompt(
-                    tokenizer_two, args.class_prompt, add_special_tokens,
+                    tokenizer_two,
+                    args.class_prompt,
+                    add_special_tokens,
                 )
                 tokens_one = torch.cat([tokens_one, class_tokens_one], dim=0)
                 tokens_two = torch.cat([tokens_two, class_tokens_two], dim=0)
@@ -2161,7 +2224,9 @@ def main(args) -> None:
         for batch in tqdm(train_dataloader, desc="Caching latents"):
             with torch.no_grad():
                 batch["pixel_values"] = batch["pixel_values"].to(
-                    accelerator.device, non_blocking=True, dtype=torch.float32,
+                    accelerator.device,
+                    non_blocking=True,
+                    dtype=torch.float32,
                 )
                 latents_cache.append(vae.encode(batch["pixel_values"]).latent_dist)
 
@@ -2218,7 +2283,10 @@ def main(args) -> None:
         )
     else:
         unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-            unet, optimizer, train_dataloader, lr_scheduler,
+            unet,
+            optimizer,
+            train_dataloader,
+            lr_scheduler,
         )
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
@@ -2362,15 +2430,22 @@ def main(args) -> None:
                 if train_dataset.custom_instance_prompts:
                     if freeze_text_encoder:
                         prompt_embeds, unet_add_text_embeds = compute_text_embeddings(
-                            prompts, text_encoders, tokenizers, args.clip_skip,
+                            prompts,
+                            text_encoders,
+                            tokenizers,
+                            args.clip_skip,
                         )
 
                     else:
                         tokens_one = tokenize_prompt(
-                            tokenizer_one, prompts, add_special_tokens,
+                            tokenizer_one,
+                            prompts,
+                            add_special_tokens,
                         )
                         tokens_two = tokenize_prompt(
-                            tokenizer_two, prompts, add_special_tokens,
+                            tokenizer_two,
+                            prompts,
+                            add_special_tokens,
                         )
 
                 if args.cache_latents:
@@ -2385,10 +2460,12 @@ def main(args) -> None:
                         model_input = model_input.to(weight_dtype)
                 else:
                     latents_mean = latents_mean.to(
-                        device=model_input.device, dtype=model_input.dtype,
+                        device=model_input.device,
+                        dtype=model_input.dtype,
                     )
                     latents_std = latents_std.to(
-                        device=model_input.device, dtype=model_input.dtype,
+                        device=model_input.device,
+                        dtype=model_input.dtype,
                     )
                     model_input = (
                         (model_input - latents_mean)
@@ -2422,7 +2499,9 @@ def main(args) -> None:
                     # instead of discrete timesteps, so here we sample indices to get the noise levels
                     # from `scheduler.timesteps`
                     indices = torch.randint(
-                        0, noise_scheduler.config.num_train_timesteps, (bsz,),
+                        0,
+                        noise_scheduler.config.num_train_timesteps,
+                        (bsz,),
                     )
                     timesteps = noise_scheduler.timesteps[indices].to(
                         device=model_input.device,
@@ -2431,18 +2510,23 @@ def main(args) -> None:
                 # Add noise to the model input according to the noise magnitude at each timestep
                 # (this is the forward diffusion process)
                 noisy_model_input = noise_scheduler.add_noise(
-                    model_input, noise, timesteps,
+                    model_input,
+                    noise,
+                    timesteps,
                 )
                 # For EDM-style training, we first obtain the sigmas based on the continuous timesteps.
                 # We then precondition the final model inputs based on these sigmas instead of the timesteps.
                 # Follow: Section 5 of https://arxiv.org/abs/2206.00364.
                 if args.do_edm_style_training:
                     sigmas = get_sigmas(
-                        timesteps, len(noisy_model_input.shape), noisy_model_input.dtype,
+                        timesteps,
+                        len(noisy_model_input.shape),
+                        noisy_model_input.dtype,
                     )
                     if "EDM" in scheduler_type:
                         inp_noisy_latents = noise_scheduler.precondition_inputs(
-                            noisy_model_input, sigmas,
+                            noisy_model_input,
+                            sigmas,
                         )
                     else:
                         inp_noisy_latents = noisy_model_input / ((sigmas**2 + 1) ** 0.5)
@@ -2452,7 +2536,8 @@ def main(args) -> None:
                     [
                         compute_time_ids(original_size=s, crops_coords_top_left=c)
                         for s, c in zip(
-                            batch["original_sizes"], batch["crop_top_lefts"],
+                            batch["original_sizes"],
+                            batch["crop_top_lefts"],
                         )
                     ],
                 )
@@ -2471,11 +2556,14 @@ def main(args) -> None:
                     unet_added_conditions = {
                         "time_ids": add_time_ids,
                         "text_embeds": unet_add_text_embeds.repeat(
-                            elems_to_repeat_text_embeds, 1,
+                            elems_to_repeat_text_embeds,
+                            1,
                         ),
                     }
                     prompt_embeds_input = prompt_embeds.repeat(
-                        elems_to_repeat_text_embeds, 1, 1,
+                        elems_to_repeat_text_embeds,
+                        1,
+                        1,
                     )
                     model_pred = unet(
                         inp_noisy_latents
@@ -2498,12 +2586,15 @@ def main(args) -> None:
                     unet_added_conditions.update(
                         {
                             "text_embeds": pooled_prompt_embeds.repeat(
-                                elems_to_repeat_text_embeds, 1,
+                                elems_to_repeat_text_embeds,
+                                1,
                             ),
                         },
                     )
                     prompt_embeds_input = prompt_embeds.repeat(
-                        elems_to_repeat_text_embeds, 1, 1,
+                        elems_to_repeat_text_embeds,
+                        1,
+                        1,
                     )
                     model_pred = unet(
                         inp_noisy_latents
@@ -2522,14 +2613,16 @@ def main(args) -> None:
                     # Follow: Section 5 of https://arxiv.org/abs/2206.00364.
                     if "EDM" in scheduler_type:
                         model_pred = noise_scheduler.precondition_outputs(
-                            noisy_model_input, model_pred, sigmas,
+                            noisy_model_input,
+                            model_pred,
+                            sigmas,
                         )
                     elif noise_scheduler.config.prediction_type == "epsilon":
                         model_pred = model_pred * (-sigmas) + noisy_model_input
                     elif noise_scheduler.config.prediction_type == "v_prediction":
-                        model_pred = model_pred * (
-                            -sigmas / (sigmas**2 + 1) ** 0.5
-                        ) + (noisy_model_input / (sigmas**2 + 1))
+                        model_pred = model_pred * (-sigmas / (sigmas**2 + 1) ** 0.5) + (
+                            noisy_model_input / (sigmas**2 + 1)
+                        )
                     # We are not doing weighting here because it tends result in numerical problems.
                     # See: https://github.com/huggingface/diffusers/pull/7126#issuecomment-1968523051
                     # There might be other alternatives for weighting as well:
@@ -2586,7 +2679,9 @@ def main(args) -> None:
                         loss = loss.mean()
                     else:
                         loss = F.mse_loss(
-                            model_pred.float(), target.float(), reduction="mean",
+                            model_pred.float(),
+                            target.float(),
+                            reduction="mean",
                         )
                 else:
                     # Compute loss-weights as per Section 3.4 of https://arxiv.org/abs/2303.09556.
@@ -2617,7 +2712,9 @@ def main(args) -> None:
                         mse_loss_weights = base_weight
 
                     loss = F.mse_loss(
-                        model_pred.float(), target.float(), reduction="none",
+                        model_pred.float(),
+                        target.float(),
+                        reduction="none",
                     )
                     loss = (
                         loss.mean(dim=list(range(1, len(loss.shape))))
@@ -2663,7 +2760,8 @@ def main(args) -> None:
                                 d for d in checkpoints if d.startswith("checkpoint")
                             ]
                             checkpoints = sorted(
-                                checkpoints, key=lambda x: int(x.split("-")[1]),
+                                checkpoints,
+                                key=lambda x: int(x.split("-")[1]),
                             )
 
                             # before we save the new checkpoint, we need to have at _most_ `checkpoints_total_limit - 1` checkpoints
@@ -2682,12 +2780,14 @@ def main(args) -> None:
 
                                 for removing_checkpoint in removing_checkpoints:
                                     removing_checkpoint = os.path.join(
-                                        args.output_dir, removing_checkpoint,
+                                        args.output_dir,
+                                        removing_checkpoint,
                                     )
                                     shutil.rmtree(removing_checkpoint)
 
                         save_path = os.path.join(
-                            args.output_dir, f"checkpoint-{global_step}",
+                            args.output_dir,
+                            f"checkpoint-{global_step}",
                         )
                         accelerator.save_state(save_path)
                         logger.info(f"Saved state to {save_path}")
@@ -2700,8 +2800,7 @@ def main(args) -> None:
                 break
 
         if accelerator.is_main_process and (
-            args.validation_prompt is not None
-            and epoch % args.validation_epochs == 0
+            args.validation_prompt is not None and epoch % args.validation_epochs == 0
         ):
             # create pipeline
             if freeze_text_encoder:

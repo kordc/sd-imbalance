@@ -53,7 +53,6 @@ def make_img(folder: str = "./tmp", num_inference_steps=4, guidance_scale=0.0) -
             pass
 
 
-
 if __name__ == "__main__":
     # Expanded list of cat breeds
     cat_breeds = [
@@ -158,7 +157,6 @@ if __name__ == "__main__":
         "Ukrainian Levkoy",
         "York Chocolate",
     ]
-
 
     # Expanded list of prepositions
     prepositions = ["on", "under", "next to", "beside", "in front of", "behind"]

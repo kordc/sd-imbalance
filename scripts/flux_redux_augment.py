@@ -26,7 +26,8 @@ class FluxReduxAugment:
 
         # Load the Flux Redux pipelines once
         self.flux_prior_redux = FluxPriorReduxPipeline.from_pretrained(
-            "black-forest-labs/FLUX.1-Redux-dev", torch_dtype=torch.bfloat16,
+            "black-forest-labs/FLUX.1-Redux-dev",
+            torch_dtype=torch.bfloat16,
         ).to(self.device)
 
         self.flux_pipeline = FluxPipeline.from_pretrained(

@@ -107,7 +107,6 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 self.targets = list(oversampled_targets)
 
             elif self.naive_undersample:
-
                 # Calculate the target number of samples (size of downsampled class)
                 target_size = keep_size  # Size of downsampled class
 

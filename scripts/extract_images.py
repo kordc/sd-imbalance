@@ -34,7 +34,6 @@ def main() -> None:
     cat_label = CIFAR10_CLASSES["cat"]  # For example, 3.
     cat_indices = [i for i, label in enumerate(dataset.targets) if label == cat_label]
 
-
     # Create output directory for cat images.
     output_dir = "cats"
     os.makedirs(output_dir, exist_ok=True)

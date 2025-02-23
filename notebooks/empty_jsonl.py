@@ -1,9 +1,9 @@
 import json
 
-input_file = 'metadata.jsonl'
-output_file = 'output.jsonl'
+input_file = "metadata.jsonl"
+output_file = "output.jsonl"
 
-with open(input_file, 'r') as infile, open(output_file, 'w') as outfile:
+with open(input_file, "r") as infile, open(output_file, "w") as outfile:
     for line in infile:
         # Load each JSON object (each line should be valid JSON)
         data = json.loads(line)
