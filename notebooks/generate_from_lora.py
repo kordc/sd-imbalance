@@ -371,13 +371,21 @@ def make_img(
     for i in tqdm(range(num_images), desc="Generating Images"):
         # Randomly select components for the prompt
         # breed = random.choice(cat_breeds)
+        breed = random.choice(cat_breeds)
         preposition = random.choice(prepositions)
         furniture = random.choice(furniture_or_outdoor[preposition])
+        angle = random.choice(camera_angles)
+        gaze = random.choice(gaze_directions)
         random.choice(camera_angles)
         random.choice(gaze_directions)
 
         # Construct the prompt
-        prompt = f"Realistic image of a cat sitting {preposition} a {furniture}"
+        prompt = (
+            f"{angle} of a {breed} cat {preposition} the {furniture}, {gaze}. "
+            "The cat has realistic fur textures, intricate details, and sharp features, "
+            "with soft lighting and a clear focus. The image has a shallow depth of field, "
+            "emphasizing the cat in fine detail. 8k, cinematic, photorealistic"
+        )
         print(prompt)
         pipe.to(torch.bfloat16)
 
@@ -424,4 +432,4 @@ if __name__ == "__main__":
     repo_id = f"{username}/{output_dir}"
     pipe.load_lora_weights(repo_id, weight_name="pytorch_lora_weights.safetensors")
 
-    make_img("again_blurry", num_images=10000, pipe=pipe)
+    make_img("blurry_LoRA_full_prompt", num_images=100000, pipe=pipe)
