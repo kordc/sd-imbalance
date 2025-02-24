@@ -18,24 +18,12 @@ from utils import CIFAR10_CLASSES
 
 
 class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
-    def __init__(
-        self,
-        root,
-        train=True,
-        transform=None,
-        download=True,
-        downsample_class=None,
-        downsample_ratio=1.0,
-        naive_oversample=False,
-        naive_undersample=False,
-        smote=False,
-        adasyn=False,
-        random_state=42,
-        add_extra_images=False,
-        extra_images_dir="extra-images",
-        max_extra_images=None,
-        keep_only_cat=False,
-    ) -> None:
+    def __init__(self, root, train=True, transform=None, download=True,
+                 downsample_class=None, downsample_ratio=1.0,
+                 naive_oversample=False, naive_undersample=False,
+                 smote=False, adasyn=False, random_state=42,
+                 add_extra_images=False, extra_images_dir="extra-images",
+                 max_extra_images=None, keep_only_cat=False) -> None:
         super().__init__(root=root, train=train, transform=transform, download=download)
         self.downsample_class = downsample_class
         self.downsample_ratio = downsample_ratio
@@ -56,6 +44,41 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
 
         if self.add_extra_images:
             self._add_extra_images()
+
+        # After modifying self.data, update normalization in the transform:
+        self.update_normalization()
+
+    def get_new_std_mean(self):
+        data_float = self.data.astype(np.float32) / 255.0
+        new_mean = data_float.mean(axis=(0, 1, 2)).tolist()
+        new_std = data_float.std(axis=(0, 1, 2)).tolist()
+        return new_mean, new_std
+    
+    def update_normalization(self):
+        """
+        Recalculate normalization parameters from the current dataset data (self.data)
+        and update the Normalize step in self.transform (if present).
+        """
+        new_mean, new_std = self.get_new_std_mean()
+        print("Recalculated normalization parameters:")
+        print("Mean:", new_mean)
+        print("Std:", new_std)
+        
+        # Update self.transform if it is a Compose transform.
+        if self.transform is not None and isinstance(self.transform, transforms.Compose):
+            new_transforms = []
+            for t in self.transform.transforms:
+                if isinstance(t, transforms.Normalize):
+                    new_transforms.append(transforms.Normalize(mean=new_mean, std=new_std))
+                else:
+                    new_transforms.append(t)
+            self.transform = transforms.Compose(new_transforms)
+        else:
+            # If no transform is provided, you might choose to create one.
+            self.transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize(mean=new_mean, std=new_std)
+            ])
 
     def _downsample(self) -> None:
         targets = np.array(self.targets)
@@ -251,6 +274,14 @@ class CIFAR10DataModule(L.LightningDataModule):
             max_extra_images=self.cfg.max_extra_images,
             keep_only_cat=self.cfg.keep_only_cat,
         )
+
+        new_mean, new_std = full_train_dataset.get_new_std_mean()
+
+        self.test_transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize(mean=new_mean, std=new_std)
+            ])
+
         self.test_dataset = torchvision.datasets.CIFAR10(
             root="./data",
             train=False,
