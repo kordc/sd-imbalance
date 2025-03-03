@@ -7,7 +7,7 @@ from omegaconf import DictConfig, OmegaConf
 import wandb
 from data import CIFAR10DataModule
 from model import ResNet18Model
-from utils import visualize_feature_maps
+from utils import visualize_feature_maps, visualize_filters, apply_gradcam
 
 
 @hydra.main(config_path="config", config_name="config", version_base="1.2")
@@ -47,6 +47,10 @@ def main(cfg: DictConfig) -> None:
 
     trainer.fit(model, datamodule=data_module)
     trainer.test(model, datamodule=data_module)
+
+    if cfg.get("visualize_trained_model", False):
+        visualize_filters(model)
+        apply_gradcam(model, data_module)
 
 
 if __name__ == "__main__":

@@ -65,3 +65,4 @@ test_augmentations:
 
 checkpoint_path: 
 visualize_feature_maps: false  # Set to true to only visualize feature maps
+visualize_trained_model: false
