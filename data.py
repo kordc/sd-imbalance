@@ -244,7 +244,7 @@ class CIFAR10DataModule(L.LightningDataModule):
     def get_augmentations(self, augmentations_cfg):
         transform_list = []
         # Mapping for custom transforms.
-        custom_transforms = {"FluxReduxAugment": FluxReduxAugment if "FluxReduxAugment" in augmentations_cfg else None}
+        custom_transforms = {"FluxReduxAugment": FluxReduxAugment if "FluxReduxAugment" in augmentations_cfg else None}  # noqa: F821
         for aug in augmentations_cfg:
             aug_name = aug["name"]
             params = aug.get("params", {})

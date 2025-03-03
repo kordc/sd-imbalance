@@ -117,6 +117,9 @@ venv.bak/
 
 outputs/*
 data/*
+notebooks/data/*
+notebooks/outputs/*
+notebooks/.ipynb_checkpoints/*
 .ruff_cache/*
 .hydra/*
 *.png
