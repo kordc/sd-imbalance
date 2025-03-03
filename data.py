@@ -250,6 +250,15 @@ class CIFAR10DataModule(L.LightningDataModule):
             params = aug.get("params", {})
             if aug_name in custom_transforms:
                 transform_list.append(custom_transforms[aug_name](**params))
+            elif "resize" in aug_name.lower():
+                interpolation_dict = {
+                    "nearest": Image.NEAREST,
+                    "bilinear": Image.BILINEAR,
+                    "bicubic": Image.BICUBIC,
+                    "lanczos": Image.LANCZOS,
+                }
+                params["interpolation"] = interpolation_dict[params["interpolation"]]
+                transform_list.append(getattr(transforms, aug_name)(**params))
             else:
                 transform_list.append(getattr(transforms, aug_name)(**params))
         return transforms.Compose(transform_list)

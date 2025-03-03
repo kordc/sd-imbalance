@@ -7,7 +7,7 @@ hydra:
 dynamic_upsample: false
 num_dynamic_upsample: 50
 
-downsample_class: cat # Class to downsample, e.g., "cat"
+downsample_class: # Class to downsample, e.g., "cat"
 downsample_ratio: 0.01 # How many examples to keep
 naive_oversample: false
 naive_undersample: false
@@ -47,29 +47,21 @@ augmentations:
     - name: RandomHorizontalFlip
       params:
           p: 0.5
-    # - name: ColorJitter
-    #   params:
-    #       brightness: 0.5
-    #       hue: 0.3
-    # - name: RandomPerspective
-    #   params:
-    #       distortion_scale: 0.2
-    #       p: 1.0
-    #       fill: 0
-    # - name: RandomRotation
-    #   params:
-    #       degrees: 180
-    #       fill: 0
-    # - name: RandomSolarize
-    #   params:
-    #       threshold: 0.75
-    #       p: 0.5
+    # Resize to 32x32
+    - name: Resize
+      params:
+          size: 128
+          interpolation: "bicubic"
 test_augmentations:
     - name: ToTensor
     - name: Normalize
       params:
           mean: [0.485, 0.456, 0.406]
           std: [0.229, 0.224, 0.225]
+    - name: Resize
+      params:
+          size: 128
+          interpolation: "bicubic"
 
 checkpoint_path: 
 visualize_feature_maps: false  # Set to true to only visualize feature maps
