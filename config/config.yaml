@@ -50,7 +50,7 @@ augmentations:
     # Resize to 32x32
     - name: Resize
       params:
-          size: 128
+          size: 32
           interpolation: "bicubic"
 test_augmentations:
     - name: ToTensor
@@ -60,7 +60,7 @@ test_augmentations:
           std: [0.229, 0.224, 0.225]
     - name: Resize
       params:
-          size: 128
+          size: 32
           interpolation: "bicubic"
 
 checkpoint_path: 

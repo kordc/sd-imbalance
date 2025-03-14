@@ -1,6 +1,7 @@
 import os
 
 from PIL import Image
+import lightning as L
 
 from data import DownsampledCIFAR10
 from utils import (
@@ -9,6 +10,8 @@ from utils import (
 
 
 def main() -> None:
+    # Seed
+    L.seed_everything(42, workers=True)
     # Configure dataset parameters.
     # For CIFAR10, there are 5,000 cat images in the training set.
     # To keep 50 cat images, we use a downsample ratio of 50/5000 = 0.01.
@@ -35,7 +38,7 @@ def main() -> None:
     cat_indices = [i for i, label in enumerate(dataset.targets) if label == cat_label]
 
     # Create output directory for cat images.
-    output_dir = "cats"
+    output_dir = "cats_32x32_nearest"
     os.makedirs(output_dir, exist_ok=True)
 
     # Save each cat image as a JPEG file after resizing to 512x512 pixels.
@@ -45,7 +48,7 @@ def main() -> None:
         img = Image.fromarray(img_array)
 
         # Resize image to 512x512 pixels using high-quality resampling.
-        img_resized = img.resize((512, 512), Image.LANCZOS)
+        img_resized = img.resize((32, 32), Image.NEAREST)
 
         save_path = os.path.join(output_dir, f"cat_{count + 1}.jpg")
         img_resized.save(save_path, format="JPEG")

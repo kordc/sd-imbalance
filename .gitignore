@@ -130,3 +130,6 @@ notebooks/wandb*
 *.json
 *.jsonl
 *.safetensors
+*.deb
+*cifar-10-batches-py*
+*.tar*
