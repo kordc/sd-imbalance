@@ -7,7 +7,7 @@ from omegaconf import DictConfig, OmegaConf
 import wandb
 from data import CIFAR10DataModule
 from model import ResNet18Model
-from utils import visualize_feature_maps, visualize_filters, apply_gradcam
+from utils import visualize_feature_maps, visualize_filters
 
 
 @hydra.main(config_path="config", config_name="config", version_base="1.2")
@@ -50,15 +50,21 @@ def main(cfg: DictConfig) -> None:
 
     if cfg.get("visualize_trained_model", False):
         # Generate visualizations
-        feature_map_img, reseized_img = visualize_feature_maps(model, data_module, return_image=True)
+        feature_map_img, reseized_img = visualize_feature_maps(
+            model, data_module, return_image=True
+        )
         filter_img = visualize_filters(model, return_image=True)
         # gradcam_img = apply_gradcam(model, data_module, return_image=True)
-        
+
         # Log images to wandb
         if feature_map_img is not None:
-            wandb.log({"feature_maps": wandb.Image(feature_map_img, caption="Feature Maps")})
+            wandb.log(
+                {"feature_maps": wandb.Image(feature_map_img, caption="Feature Maps")}
+            )
         if reseized_img is not None:
-            wandb.log({"resized_img": wandb.Image(reseized_img, caption="Resized Image")})
+            wandb.log(
+                {"resized_img": wandb.Image(reseized_img, caption="Resized Image")}
+            )
         if filter_img is not None:
             wandb.log({"conv_filters": wandb.Image(filter_img, caption="Conv Filters")})
         # if gradcam_img:

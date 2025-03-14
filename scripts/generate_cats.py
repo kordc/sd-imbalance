@@ -4,16 +4,27 @@ import os
 import random
 
 import torch
-from diffusers import StableDiffusion3Pipeline
+from diffusers import DiffusionPipeline
 from tqdm import tqdm
 
+# L.seed_everything(42)
 
-def make_img(folder: str = "./tmp", num_inference_steps=4, guidance_scale=0.0) -> None:
+
+def make_img(folder: str = "./tmp", num_inference_steps=40, guidance_scale=0.0) -> None:
     # Directory to save generated images
     output_dir = folder
     os.makedirs(output_dir, exist_ok=True)
     # Generate synthetic images
-    num_images = 6000
+    num_images = 10000
+    refiner = DiffusionPipeline.from_pretrained(
+        "stabilityai/stable-diffusion-xl-refiner-1.0",
+        text_encoder_2=pipe.text_encoder_2,
+        vae=pipe.vae,
+        torch_dtype=torch.float16,
+        use_safetensors=True,
+        variant="fp16",
+    )
+    refiner.to("cuda")
     for i in tqdm(range(num_images), desc="Generating Images"):
         # Randomly select components for the prompt
         breed = random.choice(cat_breeds)
@@ -32,15 +43,31 @@ def make_img(folder: str = "./tmp", num_inference_steps=4, guidance_scale=0.0) -
             "emphasizing the cat in fine detail. 8k, cinematic, photorealistic"
         )
         try:
-            # Generate image
-            result = pipe(
-                prompt,
+            image = pipe(
+                prompt=prompt,
                 num_inference_steps=num_inference_steps,
-                guidance_scale=guidance_scale,
+                denoising_end=0.8,
+                output_type="latent",
                 width=512,
                 height=512,
-            )
-            image = result.images[0]  # Get the first image from the list
+            ).images
+            image = refiner(
+                prompt=prompt,
+                num_inference_steps=num_inference_steps,
+                denoising_start=0.8,
+                image=image,
+                width=512,
+                height=512,
+            ).images[0]
+            # Generate image
+            # result = pipe(
+            #     prompt,
+            #     num_inference_steps=num_inference_steps,
+            #     guidance_scale=guidance_scale,
+            #     width=512,
+            #     height=512,
+            # )
+            # image = result.images[0]  # Get the first image from the list
 
             # Save the generated image
             output_path = os.path.join(
@@ -358,11 +385,11 @@ if __name__ == "__main__":
         ],
     }
     camera_angles = [
-        "a photo taken from above",
-        "a photo taken from below",
-        "a side-view photo",
-        "a front-facing photo",
-        "a photo taken from behind",
+        "a realistic photo taken from above",
+        "a realistic photo taken from below",
+        "a realistic side-view photo",
+        "a realistic front-facing photo",
+        "a realistic photo taken from behind",
     ]
 
     # List of gaze directions
@@ -380,9 +407,11 @@ if __name__ == "__main__":
         "looking over its shoulder",
     ]
 
-    pipe = StableDiffusion3Pipeline.from_pretrained(
-        "stabilityai/stable-diffusion-3.5-large-turbo",
-        torch_dtype=torch.bfloat16,
+    pipe = DiffusionPipeline.from_pretrained(
+        "stabilityai/stable-diffusion-xl-base-1.0",
+        torch_dtype=torch.float16,
+        variant="fp16",
+        use_safetensors=True,
     )
     pipe = pipe.to("cuda")
-    make_img("./generated_cats_stable-diffusion-3.5-large-turbo", 6)
+    make_img("./generated_cats_SDXL_refiner", 40)

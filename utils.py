@@ -153,9 +153,9 @@ def visualize_feature_maps(model, data_module, return_image=False):
         feature_maps = model.visualize_feature_maps(sample)
 
         # Plot and save a few feature maps (e.g. first 8 channels)
-        
+
         if return_image:
-            return feature_maps[0,0].cpu().numpy(), sample_img_resized
+            return feature_maps[0, 0].cpu().numpy(), sample_img_resized
         else:
             num_maps = min(feature_maps.shape[1], 8)
             fig, axs = plt.subplots(1, num_maps, figsize=(num_maps * 2, 2))
@@ -167,6 +167,7 @@ def visualize_feature_maps(model, data_module, return_image=False):
             plt.savefig(feature_maps_save_path, bbox_inches="tight")
             plt.close()
 
+
 def visualize_filters(model, return_image=False):
     """Visualize the filters of the first convolutional layer in the model."""
     # Get the first convolutional layer
@@ -175,26 +176,28 @@ def visualize_filters(model, return_image=False):
         if isinstance(module, torch.nn.Conv2d):
             first_conv_layer = module
             break
-    
+
     if first_conv_layer is None:
         print("No convolutional layer found in the model.")
         return
-    
+
     # Get the weights of the first conv layer
     weights = first_conv_layer.weight.data.cpu()
-    
+
     # Normalize the weights for better visualization
     min_val = weights.min()
     max_val = weights.max()
     weights = (weights - min_val) / (max_val - min_val)
-    
+
     # Plot the filters
     n_filters = min(weights.size(0), 64)  # Limit to 64 filters
     grid_size = int(np.ceil(np.sqrt(n_filters)))
-    
-    fig, axes = plt.subplots(grid_size, grid_size, figsize=(grid_size*2, grid_size*2))
+
+    fig, axes = plt.subplots(
+        grid_size, grid_size, figsize=(grid_size * 2, grid_size * 2)
+    )
     axes = axes.flatten()
-    
+
     for i in range(grid_size * grid_size):
         if i < n_filters:
             # For RGB filters, convert to displayable image
@@ -203,10 +206,10 @@ def visualize_filters(model, return_image=False):
                 img = filter_img.permute(1, 2, 0)  # Convert to HWC format
             else:  # Grayscale
                 img = filter_img[0]
-            
+
             axes[i].imshow(img)
-        axes[i].axis('off')
-    
+        axes[i].axis("off")
+
     if return_image:
         return fig
     else:
@@ -217,23 +220,25 @@ def visualize_filters(model, return_image=False):
         print("Filter visualization saved to conv_filters.png")
 
 
-def apply_gradcam(model, data_module, target_layer=None, num_samples=5, return_image=False):
+def apply_gradcam(
+    model, data_module, target_layer=None, num_samples=5, return_image=False
+):
     """
     Apply GradCAM to visualize which parts of input images the model focuses on.
-    
+
     Args:
         model: The trained model
         data_module: Data module containing the dataset
         target_layer: The layer to use for GradCAM. If None, use the last conv layer.
         num_samples: Number of samples to visualize
         return_image: If True, return the figure instead of saving it
-    
+
     Returns:
         If return_image is True, returns the matplotlib figure; otherwise None.
     """
     # Move model to evaluation mode
     model.eval()
-    
+
     # Find target layer if not specified
     if target_layer is None:
         # Find the last convolutional layer
@@ -241,108 +246,112 @@ def apply_gradcam(model, data_module, target_layer=None, num_samples=5, return_i
             if isinstance(module, torch.nn.Conv2d):
                 target_layer = module
                 break
-    
+
     if target_layer is None:
         print("No convolutional layer found for GradCAM.")
         return None
-    
+
     # Get samples from test set
     test_loader = data_module.test_dataloader()
     batch = next(iter(test_loader))
     images, labels = batch
-    
+
     # Limit to num_samples
     images = images[:num_samples]
     labels = labels[:num_samples]
-    
+
     # Register hooks to get activations and gradients
     activations = {}
     gradients = {}
-    
+
     def get_activation(name):
         def hook(model, input, output):
             activations[name] = output.detach()
+
         return hook
-    
+
     def get_gradient(name):
         def hook(grad):
             gradients[name] = grad.detach()
+
         return hook
-    
+
     # Register hooks
-    handle_act = target_layer.register_forward_hook(get_activation('target'))
-    
+    handle_act = target_layer.register_forward_hook(get_activation("target"))
+
     # Create figure for results
-    fig, axes = plt.subplots(num_samples, 3, figsize=(12, 4*num_samples))
-    
+    fig, axes = plt.subplots(num_samples, 3, figsize=(12, 4 * num_samples))
+
     for i in range(num_samples):
-        img = images[i:i+1].to(model.device)
+        img = images[i : i + 1].to(model.device)
         label = labels[i].item()
         class_name = CIFAR10_CLASSES_REVERSE[label]
-        
+
         # Forward pass
         output = model(img)
         pred_score, pred_class = torch.max(output, 1)
         pred_class_name = CIFAR10_CLASSES_REVERSE[pred_class.item()]
-        
+
         # Register backward hook
-        activations['target'].register_hook(get_gradient('target'))
-        
+        activations["target"].register_hook(get_gradient("target"))
+
         # Backprop
         model.zero_grad()
         output[0, pred_class].backward()
-        
+
         # Get activations and gradients
-        act = activations['target']
-        grad = gradients['target']
-        
+        act = activations["target"]
+        grad = gradients["target"]
+
         # Global average pooling of gradients
         weights = torch.mean(grad, dim=(2, 3), keepdim=True)
-        
+
         # Weighted sum of activation maps
         gradcam = torch.sum(weights * act, dim=1, keepdim=True)
-        
+
         # ReLU and normalize
         gradcam = torch.relu(gradcam)
         gradcam = F.interpolate(
-            gradcam, 
+            gradcam,
             size=(32, 32),  # CIFAR10 image size
-            mode='bilinear', 
-            align_corners=False
+            mode="bilinear",
+            align_corners=False,
         )
-        
+
         # Normalize between 0 and 1
         gradcam_min, gradcam_max = gradcam.min(), gradcam.max()
         gradcam = (gradcam - gradcam_min) / (gradcam_max - gradcam_min + 1e-8)
-        
+
         # Convert to numpy for visualization
         img_np = img[0].permute(1, 2, 0).cpu().numpy()
-        img_np = img_np * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
+        img_np = img_np * np.array([0.229, 0.224, 0.225]) + np.array(
+            [0.485, 0.456, 0.406]
+        )
         img_np = np.clip(img_np, 0, 1)
-        
+
         gradcam_np = gradcam[0, 0].cpu().numpy()
-        
+
         # Create heatmap
         heatmap = plt.cm.jet(gradcam_np)[:, :, :3]  # RGBA -> RGB
         superimposed = 0.6 * heatmap + 0.4 * img_np
-        
+
         # Plot original image
         axes[i, 0].imshow(img_np)
         axes[i, 0].set_title(f"Original: {class_name}")
-        axes[i, 0].axis('off')
-        
+        axes[i, 0].axis("off")
+
         # Plot GradCAM
         axes[i, 1].imshow(heatmap)
         axes[i, 1].set_title("GradCAM")
-        axes[i, 1].axis('off')
-        
+        axes[i, 1].axis("off")
+
         # Plot superimposed
         axes[i, 2].imshow(superimposed)
         axes[i, 2].set_title(f"Prediction: {pred_class_name}")
-        axes[i, 2].axis('off')
-    
+        axes[i, 2].axis("off")
+
     plt.tight_layout()
-    
+
     if return_image:
         # Clean up hooks before returning
         handle_act.remove()

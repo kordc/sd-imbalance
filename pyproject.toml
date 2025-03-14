@@ -44,5 +44,4 @@ dependencies = [
 exclude = ["notebooks/*.ipynb"]
 
 [tool.uv.sources]
-diffusers = { git = "https://github.com/huggingface/diffusers.git" }
 datasets = { git = "https://github.com/huggingface/datasets.git" }
