@@ -98,7 +98,7 @@ def plot_metrics(log_dir) -> None:
     plt.close()
 
 
-def visualize_feature_maps(model, data_module):
+def visualize_feature_maps(model, data_module, return_image=False):
     cat_label = CIFAR10_CLASSES["cat"]
     # Access the underlying dataset (random_split creates a Subset)
     if hasattr(data_module.train_dataset, "dataset"):
@@ -153,19 +153,21 @@ def visualize_feature_maps(model, data_module):
         feature_maps = model.visualize_feature_maps(sample)
 
         # Plot and save a few feature maps (e.g. first 8 channels)
-        num_maps = min(feature_maps.shape[1], 8)
-        fig, axs = plt.subplots(1, num_maps, figsize=(num_maps * 2, 2))
-        for i in range(num_maps):
-            fm = feature_maps[0, i].cpu().numpy()
-            axs[i].imshow(fm, cmap="viridis")
-            axs[i].axis("off")
-        feature_maps_save_path = "feature_maps.png"
-        plt.savefig(feature_maps_save_path, bbox_inches="tight")
-        plt.close()
+        
+        if return_image:
+            return feature_maps[0,0].cpu().numpy(), sample_img_resized
+        else:
+            num_maps = min(feature_maps.shape[1], 8)
+            fig, axs = plt.subplots(1, num_maps, figsize=(num_maps * 2, 2))
+            for i in range(num_maps):
+                fm = feature_maps[0, i].cpu().numpy()
+                axs[i].imshow(fm, cmap="viridis")
+                axs[i].axis("off")
+            feature_maps_save_path = "feature_maps.png"
+            plt.savefig(feature_maps_save_path, bbox_inches="tight")
+            plt.close()
 
-# ...existing code...
-
-def visualize_filters(model):
+def visualize_filters(model, return_image=False):
     """Visualize the filters of the first convolutional layer in the model."""
     # Get the first convolutional layer
     first_conv_layer = None
@@ -205,14 +207,17 @@ def visualize_filters(model):
             axes[i].imshow(img)
         axes[i].axis('off')
     
-    plt.suptitle("First Layer Conv Filters")
-    plt.tight_layout()
-    plt.savefig("conv_filters.png")
-    plt.close()
-    print("Filter visualization saved to conv_filters.png")
+    if return_image:
+        return fig
+    else:
+        plt.suptitle("First Layer Conv Filters")
+        plt.tight_layout()
+        plt.savefig("conv_filters.png")
+        plt.close()
+        print("Filter visualization saved to conv_filters.png")
 
 
-def apply_gradcam(model, data_module, target_layer=None, num_samples=5):
+def apply_gradcam(model, data_module, target_layer=None, num_samples=5, return_image=False):
     """
     Apply GradCAM to visualize which parts of input images the model focuses on.
     
@@ -221,6 +226,10 @@ def apply_gradcam(model, data_module, target_layer=None, num_samples=5):
         data_module: Data module containing the dataset
         target_layer: The layer to use for GradCAM. If None, use the last conv layer.
         num_samples: Number of samples to visualize
+        return_image: If True, return the figure instead of saving it
+    
+    Returns:
+        If return_image is True, returns the matplotlib figure; otherwise None.
     """
     # Move model to evaluation mode
     model.eval()
@@ -235,7 +244,7 @@ def apply_gradcam(model, data_module, target_layer=None, num_samples=5):
     
     if target_layer is None:
         print("No convolutional layer found for GradCAM.")
-        return
+        return None
     
     # Get samples from test set
     test_loader = data_module.test_dataloader()
@@ -333,9 +342,16 @@ def apply_gradcam(model, data_module, target_layer=None, num_samples=5):
         axes[i, 2].axis('off')
     
     plt.tight_layout()
-    plt.savefig("gradcam_results.png")
-    plt.close()
-    print("GradCAM results saved to gradcam_results.png")
     
-    # Clean up hooks
-    handle_act.remove()
+    if return_image:
+        # Clean up hooks before returning
+        handle_act.remove()
+        return fig
+    else:
+        # Save and close
+        plt.savefig("gradcam_results.png")
+        plt.close()
+        print("GradCAM results saved to gradcam_results.png")
+        # Clean up hooks
+        handle_act.remove()
+        return None
