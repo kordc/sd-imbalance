@@ -15,6 +15,7 @@ def main(cfg: DictConfig) -> None:
     L.seed_everything(cfg.seed, workers=True)
     data_module = CIFAR10DataModule(cfg)
     data_module.prepare_data()
+    # data_module.setup("fit")
     model = ResNet18Model(cfg, class_weights=data_module.class_weights)
 
     if cfg.get("checkpoint_path"):
