@@ -68,16 +68,16 @@ visualize_feature_maps: False  # Set to true to only visualize feature maps
 visualize_trained_model: True
 
 downsample_classes:
-  "airplane": 0.1
-  "automobile": 0.1
-  "bird": 0.1
-  "cat": 0.01
-  "deer": 0.1
-  "dog": 0.1
-  "frog": 0.1
-  "horse": 0.1
-  "ship": 0.1
-  "truck": 0.1
+  "airplane": 1
+  "automobile": 1
+  "bird": 1
+  "cat": 0.1
+  "deer": 1
+  "dog": 1
+  "frog": 1
+  "horse": 1
+  "ship": 1
+  "truck": 1
 
 
 # Multi-class image addition
@@ -85,7 +85,7 @@ extra_images_per_class:
   "airplane": 0
   "automobile": 0
   "bird": 0
-  "cat": 950
+  "cat": 4950
   "deer": 0
   "dog": 0
   "frog": 0
@@ -93,4 +93,7 @@ extra_images_per_class:
   "ship": 0
   "truck": 0
 
-normalize_synthetic: None # None, mean_std, clahe
+normalize_synthetic: 'mean_std'  # None, 'mean_std', or 'clahe'
+similarity_filter: 'original'    # None, 'original', or 'synthetic'
+similarity_threshold: 0.8        # Threshold for similarity filtering
+reference_sample_size: 50        # Number of reference images to use
