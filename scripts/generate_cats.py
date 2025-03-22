@@ -33,10 +33,11 @@ def make_img(folder: str = "./tmp", num_images=10000) -> None:
         # furniture = random.choice(furniture_or_outdoor[preposition])
         angle = random.choice(camera_angles)
         gaze = random.choice(gaze_directions)
+        controlling_cat = random.choice(["black", "white", "orange", "gray", "tabby", "calico", "brown", "siamese", "persian"])
 
         # Construct the prompt
         prompt = (
-            f"A realistic photo of a cat {gaze}, {angle}. "
+            f"A realistic photo of a {controlling_cat} cat {gaze}, {angle}. "
             "The cat has realistic fur textures, intricate details, and sharp features, "
             "with soft lighting and a clear focus. 8k, cinematic, photorealistic"
         )
@@ -67,17 +68,17 @@ if __name__ == "__main__":
 
     # List of gaze directions
     gaze_directions = [
-        # "looking straight ahead",
-        # "looking up",
-        # "looking down",
-        # "looking to the left",
-        # "looking to the right",
-        # "looking up and to the left",
-        # "looking up and to the right",
-        # "looking down and to the left",
-        # "looking down and to the right",
-        # "eyes closed",
-        # "looking over its shoulder",
+        "looking straight ahead",
+        "looking up",
+        "looking down",
+        "looking to the left",
+        "looking to the right",
+        "looking up and to the left",
+        "looking up and to the right",
+        "looking down and to the left",
+        "looking down and to the right",
+        "eyes closed",
+        "looking over its shoulder",
         "walking",
         "running",
         "playing",
@@ -94,4 +95,4 @@ if __name__ == "__main__":
 
     torch.cuda.empty_cache()
     gc.collect()
-    make_img("./flux_tests", 40)
+    make_img("./flux_tests", 10000)
