@@ -4,22 +4,17 @@ import os
 import random
 
 import torch
-from diffusers import DiffusionPipeline
+from diffusers import StableDiffusionPipeline, EulerDiscreteScheduler
 from tqdm import tqdm
 
 def make_img(folder: str = "./tmp", num_inference_steps=40, guidance_scale=0.0, num_images_per_class=5000) -> None:
     output_dir = folder
     os.makedirs(output_dir, exist_ok=True)
     
-    refiner = DiffusionPipeline.from_pretrained(
-        "stabilityai/stable-diffusion-xl-refiner-1.0",
-        text_encoder_2=pipe.text_encoder_2,
-        vae=pipe.vae,
-        torch_dtype=torch.float16,
-        use_safetensors=True,
-        variant="fp16",
-    )
-    refiner.to("cuda")
+    scheduler = EulerDiscreteScheduler.from_pretrained("stabilityai/stable-diffusion-2", subfolder="scheduler")
+    pipe = StableDiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-2", scheduler=scheduler, torch_dtype=torch.float16)
+    pipe = pipe.to("cuda")
+
     
     for cifar_class in cifar_classes:
         for i in tqdm(range(num_images_per_class), desc=f"Generating {cifar_class} Images"):
@@ -38,17 +33,6 @@ def make_img(folder: str = "./tmp", num_inference_steps=40, guidance_scale=0.0, 
             try:
                 image = pipe(
                     prompt=prompt,
-                    num_inference_steps=num_inference_steps,
-                    denoising_end=0.8,
-                    output_type="latent",
-                    width=512,
-                    height=512,
-                ).images
-                image = refiner(
-                    prompt=prompt,
-                    num_inference_steps=num_inference_steps,
-                    denoising_start=0.8,
-                    image=image,
                     width=512,
                     height=512,
                 ).images[0]
@@ -94,11 +78,4 @@ if __name__ == "__main__":
     backgrounds = ["a bustling city", "a quiet countryside", "a futuristic setting", "a historic village"]
     camera_angles = ["top-down view", "low-angle close-up", "side perspective", "distant wide shot"]
     
-    pipe = DiffusionPipeline.from_pretrained(
-        "stabilityai/stable-diffusion-xl-base-1.0",
-        torch_dtype=torch.float16,
-        variant="fp16",
-        use_safetensors=True,
-    )
-    pipe.to("cuda")
-    make_img("./generated_cifar10_SDXL_refiner", 40, num_images_per_class=5000)
+    make_img("./SD20", 40, num_images_per_class=1)
