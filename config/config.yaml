@@ -16,11 +16,11 @@ smote: false
 adasyn: false
 label_smoothing: false
 class_weighting: false
-add_extra_images: true
-extra_images_dir: /home/karol/sd-imbalance/generated_cifar10_SDXL_refiner
+add_extra_images: True
+extra_images_dir: /home/karol/sd-imbalance/flux_tests
 max_extra_images: 4950
 name: base
-epochs: 100
+epochs: 20
 compile: False
 batch_size: 128
 learning_rate: 0.1
@@ -64,31 +64,33 @@ test_augmentations:
           interpolation: "nearest"
 
 checkpoint_path: 
-visualize_feature_maps: false  # Set to true to only visualize feature maps
+visualize_feature_maps: False  # Set to true to only visualize feature maps
 visualize_trained_model: True
 
 downsample_classes:
-  "airplane": 0.8
-  "automobile": 0.8
-  "bird": 0.8
+  "airplane": 0.1
+  "automobile": 0.1
+  "bird": 0.1
   "cat": 0.01
-  "deer": 0.8
-  "dog": 0.8
-  "frog": 0.8
-  "horse": 0.8
-  "ship": 0.8
-  "truck": 0.8
+  "deer": 0.1
+  "dog": 0.1
+  "frog": 0.1
+  "horse": 0.1
+  "ship": 0.1
+  "truck": 0.1
 
 
 # Multi-class image addition
 extra_images_per_class:
-  "airplane": 1000
-  "automobile": 1000
-  "bird": 1000
-  "cat": 4950
-  "deer": 1000
-  "dog": 1000
-  "frog": 1000
-  "horse": 1000
-  "ship": 1000
-  "truck": 1000
+  "airplane": 0
+  "automobile": 0
+  "bird": 0
+  "cat": 950
+  "deer": 0
+  "dog": 0
+  "frog": 0
+  "horse": 0
+  "ship": 0
+  "truck": 0
+
+normalize_synthetic: None # None, mean_std, clahe

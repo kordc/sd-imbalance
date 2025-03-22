@@ -37,12 +37,14 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         max_extra_images=None,  # Single limit
         extra_images_per_class=None,  # Dict of class_name:count pairs
         keep_only_cat=False,
+        normalize_synthetic=None,  # None, 'mean_std', or 'clahe'
     ) -> None:
         super().__init__(root=root, train=train, transform=transform, download=download)
         
         # Backward compatibility
         self.downsample_class = downsample_class
         self.downsample_ratio = downsample_ratio
+        self.normalize_synthetic = normalize_synthetic
         
         # New multi-class configuration
         self.downsample_classes = downsample_classes or {}
@@ -205,24 +207,38 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         Adds extra images from a directory into the training data.
         Images should be named as CLASS_idx.png/jpg (e.g., cat_1.png, airplane_42.jpg).
         Can be configured to add specific numbers of images per class.
+        Includes normalization options for synthetic images.
         """
+        import cv2
+        
+        # Configuration for normalization - can be moved to __init__ parameters if needed
+        self.normalize_synthetic = getattr(self, 'normalize_synthetic', 'mean_std')  # Options: None, 'mean_std', 'clahe'
+        
         image_files = glob(os.path.join(self.extra_images_dir, "*.*"))
         if not image_files:
             print(f"No images found in {self.extra_images_dir}")
-            return
+            exit(1)
 
         # Group files by class
         class_to_files = {}
         for fpath in image_files:
             filename = os.path.basename(fpath)
             try:
-                class_name = filename.split('_')[0]
+                class_name = filename.split('_')[1]
                 if class_name in CIFAR10_CLASSES:
                     if class_name not in class_to_files:
                         class_to_files[class_name] = []
                     class_to_files[class_name].append(fpath)
             except:
                 print(f"Skipping file with unexpected format: {filename}")
+                
+        # Calculate dataset statistics for normalization if needed
+        if self.normalize_synthetic in ['mean_std', 'clahe']:
+            # Original dataset statistics (CIFAR-10 base)
+            orig_data = self.data.astype(np.float32) / 255.0
+            orig_mean = np.mean(orig_data, axis=(0, 1, 2))
+            orig_std = np.std(orig_data, axis=(0, 1, 2))
+            print(f"Original dataset statistics - Mean: {orig_mean}, Std: {orig_std}")
                 
         # Process each class according to configuration
         new_images_list = []
@@ -262,24 +278,83 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 selected_files = files[:num_to_use]
                 
             # Load and process images
+            class_images = []
             for fpath in selected_files:
                 try:
                     with Image.open(fpath) as img:
                         img = img.convert("RGB")
                         img = img.resize((32, 32))
                         arr = np.array(img)
-                        new_images_list.append(arr)
+                        class_images.append(arr)
                         target_classes.append(class_idx)
                 except Exception as e:
                     print(f"Error processing {fpath}: {e}")
                     
+            # Skip empty classes
+            if not class_images:
+                continue
+                    
+            # Apply normalization to this class's images if needed
+            if self.normalize_synthetic and len(class_images) > 0:
+                class_images_array = np.stack(class_images)
+                
+                if self.normalize_synthetic == 'mean_std':
+                    # Apply mean-std adjustment
+                    synth_data = class_images_array.astype(np.float32) / 255.0
+                    synth_mean = np.mean(synth_data, axis=(0, 1, 2))
+                    synth_std = np.std(synth_data, axis=(0, 1, 2))
+                    
+                    print(f"Class {class_name} synthetic stats - Mean: {synth_mean}, Std: {synth_std}")
+                    
+                    # Normalize using mean-std adjustment
+                    normalized = (synth_data - synth_mean[None, None, None, :]) / synth_std[None, None, None, :]
+                    normalized = normalized * orig_std[None, None, None, :] + orig_mean[None, None, None, :]
+                    normalized = np.clip(normalized * 255, 0, 255).astype(np.uint8)
+                    class_images = list(normalized)
+                    
+                elif self.normalize_synthetic == 'clahe':
+                    # Apply CLAHE normalization
+                    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+                    normalized = []
+                    
+                    for img in class_images_array:
+                        # Convert to LAB color space for better CLAHE results
+                        lab = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
+                        l, a, b = cv2.split(lab)
+                        
+                        # Apply CLAHE to the L channel
+                        l_clahe = clahe.apply(l)
+                        
+                        # Merge channels and convert back to RGB
+                        lab_clahe = cv2.merge((l_clahe, a, b))
+                        rgb_clahe = cv2.cvtColor(lab_clahe, cv2.COLOR_LAB2RGB)
+                        
+                        # Optional: Apply mean-std adjustment after CLAHE
+                        rgb_float = rgb_clahe.astype(np.float32) / 255.0
+                        img_mean = np.mean(rgb_float, axis=(0, 1))
+                        img_std = np.std(rgb_float, axis=(0, 1))
+                        rgb_adjusted = (rgb_float - img_mean[None, None, :]) / (img_std[None, None, :] + 1e-6)
+                        rgb_adjusted = rgb_adjusted * orig_std[None, None, :] + orig_mean[None, None, :]
+                        rgb_adjusted = np.clip(rgb_adjusted * 255, 0, 255).astype(np.uint8)
+                        
+                        normalized.append(rgb_adjusted)
+                    
+                    class_images = normalized
+            
+            # Add to our collection
+            new_images_list.extend(class_images)
+                    
         if not new_images_list:
             print("No valid images found to add")
-            return
+            exit(1)
             
         # Stack them into shape (N, 32, 32, 3)
         new_images = np.stack(new_images_list, axis=0)
-
+        
+        print(f"Normalization method: {self.normalize_synthetic}")
+        print(f"New images shape: {new_images.shape}")
+        print(f"New images range: [{new_images.min()}, {new_images.max()}]")
+        
         # Append to existing dataset data
         self.data = np.concatenate([self.data, new_images], axis=0)
 
@@ -337,6 +412,7 @@ class CIFAR10DataModule(L.LightningDataModule):
             return
     
     def prepare_data(self) -> None:
+        print("Preparing data...")
         cifar10_train_path = os.path.join("./data", "cifar-10-batches-py")
         download_flag = not os.path.exists(cifar10_train_path)
         
@@ -364,6 +440,7 @@ class CIFAR10DataModule(L.LightningDataModule):
             extra_images_per_class=extra_images_per_class,
             keep_only_cat=self.cfg.keep_only_cat,
             download=download_flag,
+            normalize_synthetic=self.cfg.normalize_synthetic,
         )
 
         new_mean, new_std = full_train_dataset.get_new_std_mean()

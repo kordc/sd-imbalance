@@ -32,7 +32,7 @@ def main(cfg: DictConfig) -> None:
     if cfg.get("visualize_feature_maps", False):
         visualize_feature_maps(model, data_module)
         return
-
+    
     config_dict = OmegaConf.to_container(cfg, resolve=True)
     wandb_logger = WandbLogger(project="cifar10_project", log_model=True)
     wandb.init(config=config_dict, project="cifar10_project", name=cfg.name)
