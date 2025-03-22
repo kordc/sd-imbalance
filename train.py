@@ -9,10 +9,15 @@ from data import CIFAR10DataModule
 from model import ResNet18Model
 from utils import visualize_feature_maps, visualize_filters
 
+import os
 
 @hydra.main(config_path="config", config_name="config", version_base="1.2")
 def main(cfg: DictConfig) -> None:
     L.seed_everything(cfg.seed, workers=True)
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     data_module = CIFAR10DataModule(cfg)
     data_module.prepare_data()
     # data_module.setup("fit")

@@ -5,9 +5,10 @@ import lightning as L
 import torch
 import torch.nn.functional as F
 import torchvision
+import numpy as np
 from omegaconf import DictConfig
-from sklearn.metrics import balanced_accuracy_score, confusion_matrix
-from torchmetrics import Accuracy
+from sklearn.metrics import balanced_accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
+from torchmetrics import Accuracy, F1Score
 from torchvision import transforms
 
 from utils import CIFAR10_CLASSES_REVERSE  # if needed
@@ -32,9 +33,24 @@ class ResNet18Model(L.LightningModule):
         self.train_accuracy = Accuracy(num_classes=10, task="multiclass")
         self.val_accuracy = Accuracy(num_classes=10, task="multiclass")
         self.test_accuracy = Accuracy(num_classes=10, task="multiclass")
+        
+        # Add F1 score metrics
+        self.train_f1 = F1Score(num_classes=10, task="multiclass", average="macro")
+        self.val_f1 = F1Score(num_classes=10, task="multiclass", average="macro")
+        self.test_f1 = F1Score(num_classes=10, task="multiclass", average="macro")
 
         self.val_confusion_matrices = {}
         self.test_confusion_matrix = None
+        
+        # Track support for each class in different splits
+        self.val_support = {}
+        self.test_support = None
+        
+        # To track all predictions and targets for more detailed metrics at epoch end
+        self.val_preds = []
+        self.val_targets = []
+        self.test_preds = []
+        self.test_targets = []
 
     def forward(self, x):
         return self.model(x)
@@ -63,6 +79,8 @@ class ResNet18Model(L.LightningModule):
 
         preds = torch.argmax(outputs, dim=1)
         self.train_accuracy(preds, labels)
+        self.train_f1(preds, labels)
+        
         balanced_acc = balanced_accuracy_score(
             labels.cpu().numpy(),
             preds.cpu().numpy(),
@@ -72,7 +90,7 @@ class ResNet18Model(L.LightningModule):
             balanced_acc,
             on_step=False,
             on_epoch=True,
-            prog_bar=True,
+            prog_bar=False,
         )
         self.log(
             "train_accuracy",
@@ -81,7 +99,14 @@ class ResNet18Model(L.LightningModule):
             on_epoch=True,
             prog_bar=True,
         )
-        self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            "train_f1",
+            self.train_f1,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+        )
+        self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=False)
         return loss
 
     def validation_step(self, batch, batch_idx, dataloader_idx):
@@ -93,6 +118,12 @@ class ResNet18Model(L.LightningModule):
 
         preds = torch.argmax(outputs, dim=1)
         self.val_accuracy(preds, labels)
+        self.val_f1(preds, labels)
+        
+        # Store predictions and targets for detailed metrics at epoch end
+        self.val_preds.append(preds.cpu())
+        self.val_targets.append(labels.cpu())
+        
         balanced_acc = balanced_accuracy_score(
             labels.cpu().numpy(),
             preds.cpu().numpy(),
@@ -104,6 +135,13 @@ class ResNet18Model(L.LightningModule):
             self.val_confusion_matrices[dataloader_idx] = current_conf
         else:
             self.val_confusion_matrices[dataloader_idx] += current_conf
+            
+        # Track support per class
+        support_count = np.bincount(labels.cpu().numpy(), minlength=10)
+        if dataloader_idx not in self.val_support:
+            self.val_support[dataloader_idx] = support_count
+        else:
+            self.val_support[dataloader_idx] += support_count
 
         self.log(
             f"{name}_balanced_accuracy",
@@ -119,6 +157,13 @@ class ResNet18Model(L.LightningModule):
             on_epoch=True,
             prog_bar=True,
         )
+        self.log(
+            f"{name}_f1",
+            self.val_f1,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+        )
         self.log(f"{name}_loss", val_loss, on_step=False, on_epoch=True, prog_bar=False)
         return {f"{name}_loss": val_loss}
 
@@ -130,6 +175,12 @@ class ResNet18Model(L.LightningModule):
 
         preds = torch.argmax(outputs, dim=1)
         self.test_accuracy(preds, labels)
+        self.test_f1(preds, labels)
+        
+        # Store predictions and targets for detailed metrics at epoch end
+        self.test_preds.append(preds.cpu())
+        self.test_targets.append(labels.cpu())
+        
         balanced_acc = balanced_accuracy_score(
             labels.cpu().numpy(),
             preds.cpu().numpy(),
@@ -141,33 +192,43 @@ class ResNet18Model(L.LightningModule):
                 preds.cpu(),
                 labels=range(10),
             )
+            self.test_support = np.bincount(labels.cpu().numpy(), minlength=10)
         else:
             self.test_confusion_matrix += confusion_matrix(
                 labels.cpu(),
                 preds.cpu(),
                 labels=range(10),
             )
+            self.test_support += np.bincount(labels.cpu().numpy(), minlength=10)
 
         self.log(
             "test_balanced_accuracy",
             balanced_acc,
             on_step=False,
             on_epoch=True,
-            prog_bar=True,
+            prog_bar=False,
         )
         self.log(
             "test_accuracy",
             self.test_accuracy,
             on_step=False,
             on_epoch=True,
-            prog_bar=True,
+            prog_bar=False,
+        )
+        self.log(
+            "test_f1",
+            self.test_f1,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=False,
         )
         self.log("test_loss", test_loss, on_step=False, on_epoch=True, prog_bar=False)
         return {"test_loss": test_loss}
 
     def on_train_epoch_end(self) -> None:
-        # Reset training accuracy metric.
+        # Reset training metrics
         self.train_accuracy.reset()
+        self.train_f1.reset()
 
         # --- Dynamic Upsampling Logic ---
         # Check if dynamic upsampling is enabled in the config.
@@ -175,39 +236,173 @@ class ResNet18Model(L.LightningModule):
             self.dynamic_upsample()
 
     def on_validation_epoch_end(self) -> None:
+        # Combine all predictions and targets
+        all_val_preds = torch.cat(self.val_preds) if self.val_preds else torch.tensor([])
+        all_val_targets = torch.cat(self.val_targets) if self.val_targets else torch.tensor([])
+        
         for dataloader_idx, conf_matrix in self.val_confusion_matrices.items():
             name = "val" if dataloader_idx == 0 else "clean_val"
+            
+            # Per-class metrics
             per_class_accuracy = conf_matrix.diagonal() / conf_matrix.sum(axis=1)
-            for class_idx, accuracy in enumerate(per_class_accuracy):
+            
+            # Get per-class support
+            class_support = self.val_support[dataloader_idx]
+            
+            # Calculate per-class F1, precision, and recall
+            y_pred = all_val_preds.numpy()
+            y_true = all_val_targets.numpy()
+            
+            # Per-class F1, precision, and recall
+            f1_per_class = f1_score(y_true, y_pred, labels=range(10), average=None, zero_division=0)
+            precision_per_class = precision_score(y_true, y_pred, labels=range(10), average=None, zero_division=0)
+            recall_per_class = recall_score(y_true, y_pred, labels=range(10), average=None, zero_division=0)
+            
+            # Class imbalance ratio (percentage of each class)
+            total_samples = class_support.sum()
+            class_ratios = class_support / total_samples if total_samples > 0 else np.zeros_like(class_support)
+            
+            # Log all metrics
+            for class_idx in range(10):
                 class_name = CIFAR10_CLASSES_REVERSE[class_idx]
                 self.log(
                     f"{name}_accuracy_{class_name}",
-                    accuracy,
+                    per_class_accuracy[class_idx],
                     on_step=False,
                     on_epoch=True,
                     prog_bar=False,
                 )
+                self.log(
+                    f"{name}_f1_{class_name}",
+                    f1_per_class[class_idx],
+                    on_step=False,
+                    on_epoch=True, 
+                    prog_bar=False,
+                )
+                self.log(
+                    f"{name}_precision_{class_name}",
+                    precision_per_class[class_idx],
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                )
+                self.log(
+                    f"{name}_recall_{class_name}",
+                    recall_per_class[class_idx],
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                )
+                self.log(
+                    f"{name}_support_{class_name}", 
+                    class_support[class_idx],
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                )
+                self.log(
+                    f"{name}_class_ratio_{class_name}", 
+                    class_ratios[class_idx],
+                    on_step=False, 
+                    on_epoch=True,
+                    prog_bar=False,
+                )
+            
+            # Log imbalance metrics
+            max_support = class_support.max()
+            min_support = class_support.min() if class_support.sum() > 0 else 0
+            imbalance_ratio = max_support / min_support if min_support > 0 else float('inf')
+            self.log(f"{name}_imbalance_ratio", imbalance_ratio, on_step=False, on_epoch=True, prog_bar=False)
+            
+        # Reset metrics and storage
         self.val_accuracy.reset()
+        self.val_f1.reset()
         self.val_confusion_matrices = {}
+        self.val_support = {}
+        self.val_preds = []
+        self.val_targets = []
 
     def on_test_epoch_end(self) -> None:
-        if self.test_confusion_matrix is not None:
+        if self.test_confusion_matrix is not None and self.test_preds:
+            # Combine all predictions and targets
+            all_test_preds = torch.cat(self.test_preds)
+            all_test_targets = torch.cat(self.test_targets)
+            
             per_class_accuracy = (
                 self.test_confusion_matrix.diagonal()
                 / self.test_confusion_matrix.sum(axis=1)
             )
-            for class_idx, accuracy in enumerate(per_class_accuracy):
+            
+            # Calculate per-class metrics
+            y_pred = all_test_preds.numpy()
+            y_true = all_test_targets.numpy()
+            
+            f1_per_class = f1_score(y_true, y_pred, labels=range(10), average=None, zero_division=0)
+            precision_per_class = precision_score(y_true, y_pred, labels=range(10), average=None, zero_division=0)
+            recall_per_class = recall_score(y_true, y_pred, labels=range(10), average=None, zero_division=0)
+            
+            # Class distribution
+            total_samples = self.test_support.sum()
+            class_ratios = self.test_support / total_samples if total_samples > 0 else np.zeros_like(self.test_support)
+            
+            for class_idx in range(10):
                 class_name = CIFAR10_CLASSES_REVERSE[class_idx]
                 self.log(
                     f"test_accuracy_{class_name}",
-                    accuracy,
+                    per_class_accuracy[class_idx],
                     on_step=False,
                     on_epoch=True,
                     prog_bar=False,
                 )
+                self.log(
+                    f"test_f1_{class_name}",
+                    f1_per_class[class_idx],
+                    on_step=False,
+                    on_epoch=True, 
+                    prog_bar=False,
+                )
+                self.log(
+                    f"test_precision_{class_name}",
+                    precision_per_class[class_idx],
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                )
+                self.log(
+                    f"test_recall_{class_name}",
+                    recall_per_class[class_idx],
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                )
+                self.log(
+                    f"test_support_{class_name}", 
+                    self.test_support[class_idx],
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                )
+                self.log(
+                    f"test_class_ratio_{class_name}", 
+                    class_ratios[class_idx],
+                    on_step=False, 
+                    on_epoch=True,
+                    prog_bar=False,
+                )
+                
+            # Log imbalance metrics
+            max_support = self.test_support.max()
+            min_support = self.test_support.min() if self.test_support.sum() > 0 else 0
+            imbalance_ratio = max_support / min_support if min_support > 0 else float('inf')
+            self.log("test_imbalance_ratio", imbalance_ratio, on_step=False, on_epoch=True, prog_bar=False)
 
+        # Reset metrics and storage
         self.test_accuracy.reset()
+        self.test_f1.reset()
         self.test_confusion_matrix = None
+        self.test_support = None
+        self.test_preds = []
+        self.test_targets = []
 
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(

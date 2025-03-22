@@ -84,6 +84,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
 
         # After modifying self.data, update normalization in the transform:
         self.update_normalization()
+        self._apply_resampling()
 
     def update_normalization(self):
         """Update the normalization parameters for the transforms after data changes."""
@@ -157,10 +158,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
 
             # Update the dataset
             self.data = self.data[all_keep_indices]
-            self.targets = list(targets[all_keep_indices])
-
-            # Apply resampling methods if selected
-            self._apply_resampling()
+            self.targets = list(targets[all_keep_indices])            
 
         # For backward compatibility with keep_only_cat
         if self.keep_only_cat and self.downsample_class is not None:
