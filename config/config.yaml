@@ -25,10 +25,6 @@ num_workers: 2
 seed: 42
 augmentations:
     - name: ToTensor
-    - name: Normalize
-      params:
-          mean: [0.49139968, 0.48215827, 0.44653124]
-          std: [0.24703233, 0.24348505, 0.26158768]
     - name: RandomCrop
       params:
           size: 32
@@ -42,10 +38,6 @@ augmentations:
           interpolation: "nearest"
 test_augmentations:
     - name: ToTensor
-    - name: Normalize
-      params:
-          mean: [0.49139968, 0.48215827, 0.44653124]
-          std: [0.24703233, 0.24348505, 0.26158768]
     - name: Resize
       params:
           size: 32
