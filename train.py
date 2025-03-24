@@ -11,6 +11,7 @@ from utils import visualize_feature_maps, visualize_filters
 
 import os
 
+
 @hydra.main(config_path="config", config_name="config", version_base="1.2")
 def main(cfg: DictConfig) -> None:
     set_reproducibility(cfg)
@@ -28,7 +29,7 @@ def main(cfg: DictConfig) -> None:
     if cfg.compile:
         model = torch.compile(model)
     torch.set_float32_matmul_precision("medium")
-    
+
     config_dict = OmegaConf.to_container(cfg, resolve=True)
     wandb_logger = WandbLogger(project="cifar10_project", log_model=True)
     wandb.init(config=config_dict, project="cifar10_project", name=cfg.name)
@@ -44,6 +45,40 @@ def main(cfg: DictConfig) -> None:
 
     trainer.fit(model, datamodule=data_module)
     trainer.test(model, datamodule=data_module)
+
+    if cfg.fine_tune_on_real_data:
+        # Fine-tune the model on real data
+        cfg.downsample_class = None
+        cfg.naive_oversample = False
+        cfg.naive_undersample = False
+        cfg.keep_only_cat = False
+        cfg.smote = False
+        cfg.adasyn = False
+        cfg.label_smoothing = False
+        cfg.class_weighting = False
+        cfg.epoch = 10
+        cfg.add_extra_images = False
+        for class_name in data_module.class_names:
+            cfg.downsample_classes["class_name"] = 1
+            cfg.extra_images_per_class["class_name"] = 0
+        cfg.dynamic_upsample = False
+        cfg.cutmix_or_mixup = False
+        cfg.name += "_fine_tuned"
+        cfg.naive_undersample = True
+        data_module = CIFAR10DataModule(cfg)
+        data_module.prepare_data()
+
+        fine_tune_trainer = L.Trainer(
+            max_epochs=cfg.epochs,
+            accelerator="auto",
+            devices="auto",
+            logger=[wandb_logger],
+            log_every_n_steps=1,
+            check_val_every_n_epoch=1,
+        )
+        model = ResNet18Model(cfg, class_weights=data_module.class_weights)
+        fine_tune_trainer.fit(model, datamodule=data_module)
+        fine_tune_trainer.test(model, datamodule=data_module)
 
     if cfg.get("visualize_trained_model", False):
         # Generate visualizations
@@ -65,12 +100,14 @@ def main(cfg: DictConfig) -> None:
         if filter_img is not None:
             wandb.log({"conv_filters": wandb.Image(filter_img, caption="Conv Filters")})
 
+
 def set_reproducibility(cfg):
     L.seed_everything(cfg.seed, workers=True)
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     torch.use_deterministic_algorithms(True)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+
 
 if __name__ == "__main__":
     main()

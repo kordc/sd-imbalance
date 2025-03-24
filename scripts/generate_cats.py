@@ -20,7 +20,7 @@ def make_img(folder: str = "./tmp", num_images=10000) -> None:
     pipe = FluxPipeline.from_pretrained(
         "black-forest-labs/FLUX.1-schnell",
         torch_dtype=torch.float16,
-        use_safetensors=True
+        use_safetensors=True,
     )
 
     pipe.enable_sequential_cpu_offload()
@@ -33,7 +33,19 @@ def make_img(folder: str = "./tmp", num_images=10000) -> None:
         # furniture = random.choice(furniture_or_outdoor[preposition])
         angle = random.choice(camera_angles)
         gaze = random.choice(gaze_directions)
-        controlling_cat = random.choice(["black", "white", "orange", "gray", "tabby", "calico", "brown", "siamese", "persian"])
+        controlling_cat = random.choice(
+            [
+                "black",
+                "white",
+                "orange",
+                "gray",
+                "tabby",
+                "calico",
+                "brown",
+                "siamese",
+                "persian",
+            ]
+        )
 
         # Construct the prompt
         prompt = (
@@ -42,13 +54,13 @@ def make_img(folder: str = "./tmp", num_images=10000) -> None:
             "with soft lighting and a clear focus. 8k, cinematic, photorealistic"
         )
         image = pipe(
-                prompt,
-                guidance_scale=3.0,
-                num_inference_steps=4,
-                max_sequence_length=128,
-                width=128,
-                height=128,
-                # negative_prompt=negative_prompt
+            prompt,
+            guidance_scale=3.0,
+            num_inference_steps=4,
+            max_sequence_length=128,
+            width=128,
+            height=128,
+            # negative_prompt=negative_prompt
         ).images[0]
         output_path = os.path.join(
             output_dir,

@@ -1,4 +1,3 @@
-import os
 import torch
 from diffusers import FluxPipeline
 import gc
@@ -8,9 +7,7 @@ torch.cuda.empty_cache()
 gc.collect()
 
 pipe = FluxPipeline.from_pretrained(
-    "black-forest-labs/FLUX.1-schnell",
-    torch_dtype=torch.float16,
-    use_safetensors=True
+    "black-forest-labs/FLUX.1-schnell", torch_dtype=torch.float16, use_safetensors=True
 )
 
 pipe.enable_sequential_cpu_offload()
@@ -34,10 +31,10 @@ promtps = [
     # "An automobile on a city street"
 ]
 prompt = (
-            "A realistic photo taken from behind of a cat, looking straight ahead."
-            "The cat has realistic fur textures, intricate details, and sharp features, "
-            "8k, cinematic, photorealistic"
-        )
+    "A realistic photo taken from behind of a cat, looking straight ahead."
+    "The cat has realistic fur textures, intricate details, and sharp features, "
+    "8k, cinematic, photorealistic"
+)
 negative_prompt = "blurry, low quality, artifacts, noise, distorted, deformed, text, watermark, logo, signature"
 
 

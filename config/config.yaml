@@ -52,7 +52,7 @@ downsample_classes:
   "airplane": 1
   "automobile": 1
   "bird": 1
-  "cat": 0.01
+  "cat": 0.1
   "deer": 1
   "dog": 1
   "frog": 1
@@ -63,7 +63,7 @@ extra_images_per_class:
   "airplane": 0
   "automobile": 0
   "bird": 0
-  "cat": 4950
+  "cat": 4500
   "deer": 0
   "dog": 0
   "frog": 0
@@ -76,5 +76,8 @@ num_dynamic_upsample: 50
 
 normalize_synthetic: 'mean_std'  # None, 'mean_std', or 'clahe'
 similarity_filter:   # None, 'original', or 'synthetic'
-similarity_threshold: 0.85       # Threshold for similarity filtering
+similarity_threshold: 0.8      # Threshold for similarity filtering
 reference_sample_size: 50        # Number of reference images to use
+
+cutmix_or_mixup: False
+fine_tune_on_real_data: False

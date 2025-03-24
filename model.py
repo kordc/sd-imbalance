@@ -5,12 +5,17 @@ import lightning as L
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision
 import numpy as np
 from omegaconf import DictConfig
-from sklearn.metrics import balanced_accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
+from sklearn.metrics import (
+    balanced_accuracy_score,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+)
 from torchmetrics import Accuracy, F1Score
-from torchvision import transforms
+from torchvision.transforms import v2
 import timm
 
 from utils import CIFAR10_CLASSES_REVERSE  # if needed
@@ -21,8 +26,10 @@ class ResNet18Model(L.LightningModule):
         super().__init__()
         self.cfg = cfg
         # self.model = torchvision.models.resnet18(num_classes=10)
-        self.model = timm.create_model('resnet18', num_classes=10, pretrained=False)
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        self.model = timm.create_model("resnet18", num_classes=10, pretrained=False)
+        self.conv1 = nn.Conv2d(
+            3, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False
+        )
         self.maxpool = nn.Identity()
         self.class_weights = class_weights
 
@@ -38,7 +45,7 @@ class ResNet18Model(L.LightningModule):
         self.train_accuracy = Accuracy(num_classes=10, task="multiclass")
         self.val_accuracy = Accuracy(num_classes=10, task="multiclass")
         self.test_accuracy = Accuracy(num_classes=10, task="multiclass")
-        
+
         # Add F1 score metrics
         self.train_f1 = F1Score(num_classes=10, task="multiclass", average="macro")
         self.val_f1 = F1Score(num_classes=10, task="multiclass", average="macro")
@@ -46,16 +53,20 @@ class ResNet18Model(L.LightningModule):
 
         self.val_confusion_matrices = {}
         self.test_confusion_matrix = None
-        
+
         # Track support for each class in different splits
         self.val_support = {}
         self.test_support = None
-        
+
         # To track all predictions and targets for more detailed metrics at epoch end
         self.val_preds = []
         self.val_targets = []
         self.test_preds = []
         self.test_targets = []
+
+        self.cutmix = v2.CutMix(num_classes=10)
+        self.mixup = v2.MixUp(num_classes=10)
+        self.cutmix_or_mixup = v2.RandomChoice([self.cutmix, self.mixup])
 
     def forward(self, x):
         return self.model(x)
@@ -79,13 +90,20 @@ class ResNet18Model(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         inputs, labels = batch
+        if self.cfg.get("cutmix_or_mixup", False):
+            inputs, labels = self.cutmix_or_mixup(
+                inputs,
+                labels,
+            )
         outputs = self(inputs)
         loss = self.criterion(outputs, labels)
 
         preds = torch.argmax(outputs, dim=1)
+        if self.cfg.get("cutmix_or_mixup", False):
+            labels = torch.argmax(labels, dim=1)
         self.train_accuracy(preds, labels)
         self.train_f1(preds, labels)
-        
+
         balanced_acc = balanced_accuracy_score(
             labels.cpu().numpy(),
             preds.cpu().numpy(),
@@ -124,11 +142,11 @@ class ResNet18Model(L.LightningModule):
         preds = torch.argmax(outputs, dim=1)
         self.val_accuracy(preds, labels)
         self.val_f1(preds, labels)
-        
+
         # Store predictions and targets for detailed metrics at epoch end
         self.val_preds.append(preds.cpu())
         self.val_targets.append(labels.cpu())
-        
+
         balanced_acc = balanced_accuracy_score(
             labels.cpu().numpy(),
             preds.cpu().numpy(),
@@ -140,7 +158,7 @@ class ResNet18Model(L.LightningModule):
             self.val_confusion_matrices[dataloader_idx] = current_conf
         else:
             self.val_confusion_matrices[dataloader_idx] += current_conf
-            
+
         # Track support per class
         support_count = np.bincount(labels.cpu().numpy(), minlength=10)
         if dataloader_idx not in self.val_support:
@@ -181,11 +199,11 @@ class ResNet18Model(L.LightningModule):
         preds = torch.argmax(outputs, dim=1)
         self.test_accuracy(preds, labels)
         self.test_f1(preds, labels)
-        
+
         # Store predictions and targets for detailed metrics at epoch end
         self.test_preds.append(preds.cpu())
         self.test_targets.append(labels.cpu())
-        
+
         balanced_acc = balanced_accuracy_score(
             labels.cpu().numpy(),
             preds.cpu().numpy(),
@@ -242,31 +260,45 @@ class ResNet18Model(L.LightningModule):
 
     def on_validation_epoch_end(self) -> None:
         # Combine all predictions and targets
-        all_val_preds = torch.cat(self.val_preds) if self.val_preds else torch.tensor([])
-        all_val_targets = torch.cat(self.val_targets) if self.val_targets else torch.tensor([])
-        
+        all_val_preds = (
+            torch.cat(self.val_preds) if self.val_preds else torch.tensor([])
+        )
+        all_val_targets = (
+            torch.cat(self.val_targets) if self.val_targets else torch.tensor([])
+        )
+
         for dataloader_idx, conf_matrix in self.val_confusion_matrices.items():
             name = "val" if dataloader_idx == 0 else "clean_val"
-            
+
             # Per-class metrics
             per_class_accuracy = conf_matrix.diagonal() / conf_matrix.sum(axis=1)
-            
+
             # Get per-class support
             class_support = self.val_support[dataloader_idx]
-            
+
             # Calculate per-class F1, precision, and recall
             y_pred = all_val_preds.numpy()
             y_true = all_val_targets.numpy()
-            
+
             # Per-class F1, precision, and recall
-            f1_per_class = f1_score(y_true, y_pred, labels=range(10), average=None, zero_division=0)
-            precision_per_class = precision_score(y_true, y_pred, labels=range(10), average=None, zero_division=0)
-            recall_per_class = recall_score(y_true, y_pred, labels=range(10), average=None, zero_division=0)
-            
+            f1_per_class = f1_score(
+                y_true, y_pred, labels=range(10), average=None, zero_division=0
+            )
+            precision_per_class = precision_score(
+                y_true, y_pred, labels=range(10), average=None, zero_division=0
+            )
+            recall_per_class = recall_score(
+                y_true, y_pred, labels=range(10), average=None, zero_division=0
+            )
+
             # Class imbalance ratio (percentage of each class)
             total_samples = class_support.sum()
-            class_ratios = class_support / total_samples if total_samples > 0 else np.zeros_like(class_support)
-            
+            class_ratios = (
+                class_support / total_samples
+                if total_samples > 0
+                else np.zeros_like(class_support)
+            )
+
             # Log all metrics
             for class_idx in range(10):
                 class_name = CIFAR10_CLASSES_REVERSE[class_idx]
@@ -281,7 +313,7 @@ class ResNet18Model(L.LightningModule):
                     f"{name}_f1_{class_name}",
                     f1_per_class[class_idx],
                     on_step=False,
-                    on_epoch=True, 
+                    on_epoch=True,
                     prog_bar=False,
                 )
                 self.log(
@@ -299,26 +331,34 @@ class ResNet18Model(L.LightningModule):
                     prog_bar=False,
                 )
                 self.log(
-                    f"{name}_support_{class_name}", 
+                    f"{name}_support_{class_name}",
                     class_support[class_idx],
                     on_step=False,
                     on_epoch=True,
                     prog_bar=False,
                 )
                 self.log(
-                    f"{name}_class_ratio_{class_name}", 
+                    f"{name}_class_ratio_{class_name}",
                     class_ratios[class_idx],
-                    on_step=False, 
+                    on_step=False,
                     on_epoch=True,
                     prog_bar=False,
                 )
-            
+
             # Log imbalance metrics
             max_support = class_support.max()
             min_support = class_support.min() if class_support.sum() > 0 else 0
-            imbalance_ratio = max_support / min_support if min_support > 0 else float('inf')
-            self.log(f"{name}_imbalance_ratio", imbalance_ratio, on_step=False, on_epoch=True, prog_bar=False)
-            
+            imbalance_ratio = (
+                max_support / min_support if min_support > 0 else float("inf")
+            )
+            self.log(
+                f"{name}_imbalance_ratio",
+                imbalance_ratio,
+                on_step=False,
+                on_epoch=True,
+                prog_bar=False,
+            )
+
         # Reset metrics and storage
         self.val_accuracy.reset()
         self.val_f1.reset()
@@ -332,24 +372,34 @@ class ResNet18Model(L.LightningModule):
             # Combine all predictions and targets
             all_test_preds = torch.cat(self.test_preds)
             all_test_targets = torch.cat(self.test_targets)
-            
+
             per_class_accuracy = (
                 self.test_confusion_matrix.diagonal()
                 / self.test_confusion_matrix.sum(axis=1)
             )
-            
+
             # Calculate per-class metrics
             y_pred = all_test_preds.numpy()
             y_true = all_test_targets.numpy()
-            
-            f1_per_class = f1_score(y_true, y_pred, labels=range(10), average=None, zero_division=0)
-            precision_per_class = precision_score(y_true, y_pred, labels=range(10), average=None, zero_division=0)
-            recall_per_class = recall_score(y_true, y_pred, labels=range(10), average=None, zero_division=0)
-            
+
+            f1_per_class = f1_score(
+                y_true, y_pred, labels=range(10), average=None, zero_division=0
+            )
+            precision_per_class = precision_score(
+                y_true, y_pred, labels=range(10), average=None, zero_division=0
+            )
+            recall_per_class = recall_score(
+                y_true, y_pred, labels=range(10), average=None, zero_division=0
+            )
+
             # Class distribution
             total_samples = self.test_support.sum()
-            class_ratios = self.test_support / total_samples if total_samples > 0 else np.zeros_like(self.test_support)
-            
+            class_ratios = (
+                self.test_support / total_samples
+                if total_samples > 0
+                else np.zeros_like(self.test_support)
+            )
+
             for class_idx in range(10):
                 class_name = CIFAR10_CLASSES_REVERSE[class_idx]
                 self.log(
@@ -363,7 +413,7 @@ class ResNet18Model(L.LightningModule):
                     f"test_f1_{class_name}",
                     f1_per_class[class_idx],
                     on_step=False,
-                    on_epoch=True, 
+                    on_epoch=True,
                     prog_bar=False,
                 )
                 self.log(
@@ -381,25 +431,33 @@ class ResNet18Model(L.LightningModule):
                     prog_bar=False,
                 )
                 self.log(
-                    f"test_support_{class_name}", 
+                    f"test_support_{class_name}",
                     self.test_support[class_idx],
                     on_step=False,
                     on_epoch=True,
                     prog_bar=False,
                 )
                 self.log(
-                    f"test_class_ratio_{class_name}", 
+                    f"test_class_ratio_{class_name}",
                     class_ratios[class_idx],
-                    on_step=False, 
+                    on_step=False,
                     on_epoch=True,
                     prog_bar=False,
                 )
-                
+
             # Log imbalance metrics
             max_support = self.test_support.max()
             min_support = self.test_support.min() if self.test_support.sum() > 0 else 0
-            imbalance_ratio = max_support / min_support if min_support > 0 else float('inf')
-            self.log("test_imbalance_ratio", imbalance_ratio, on_step=False, on_epoch=True, prog_bar=False)
+            imbalance_ratio = (
+                max_support / min_support if min_support > 0 else float("inf")
+            )
+            self.log(
+                "test_imbalance_ratio",
+                imbalance_ratio,
+                on_step=False,
+                on_epoch=True,
+                prog_bar=False,
+            )
 
         # Reset metrics and storage
         self.test_accuracy.reset()
@@ -448,10 +506,10 @@ class ResNet18Model(L.LightningModule):
             return
 
         # Use a candidate transform that converts PIL images to float tensors
-        candidate_transform = transforms.Compose(
+        candidate_transform = v2.Compose(
             [
-                transforms.Resize((32, 32)),
-                transforms.ToTensor(),  # This converts to float and scales to [0, 1]
+                v2.Resize((32, 32)),
+                v2.ToTensor(),  # This converts to float and scales to [0, 1]
             ],
         )
 

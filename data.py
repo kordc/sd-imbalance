@@ -1,5 +1,4 @@
 import os
-import sys
 from glob import glob
 
 import lightning as L
@@ -11,7 +10,7 @@ from imblearn.under_sampling import RandomUnderSampler
 from omegaconf import DictConfig
 from PIL import Image
 from torch.utils.data import DataLoader, random_split
-from torchvision import transforms
+from torchvision.transforms import v2 as transforms
 
 # from scripts.flux_redux_augment import FluxReduxAugment
 from utils import CIFAR10_CLASSES
