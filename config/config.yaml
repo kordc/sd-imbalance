@@ -4,7 +4,7 @@ hydra:
   job:
     chdir: False  # Do not change the working directory.
 
-dynamic_upsample: false
+dynamic_upsample: False
 num_dynamic_upsample: 50
 
 downsample_class: # Class to downsample, e.g., "cat"
@@ -20,7 +20,7 @@ add_extra_images: True
 extra_images_dir: /home/karol/sd-imbalance/flux_tests
 max_extra_images: 4950
 name: base
-epochs: 20
+epochs: 100
 compile: False
 batch_size: 128
 learning_rate: 0.1
@@ -71,7 +71,7 @@ downsample_classes:
   "airplane": 1
   "automobile": 1
   "bird": 1
-  "cat": 0.1
+  "cat": 0.01
   "deer": 1
   "dog": 1
   "frog": 1
@@ -94,6 +94,6 @@ extra_images_per_class:
   "truck": 0
 
 normalize_synthetic: 'mean_std'  # None, 'mean_std', or 'clahe'
-similarity_filter: 'original'    # None, 'original', or 'synthetic'
-similarity_threshold: 0.8        # Threshold for similarity filtering
+similarity_filter:   # None, 'original', or 'synthetic'
+similarity_threshold: 0.85       # Threshold for similarity filtering
 reference_sample_size: 50        # Number of reference images to use

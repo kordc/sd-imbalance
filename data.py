@@ -342,7 +342,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 continue
 
             # Filter by similarity if requested
-            if self.similarity_filter and clip_model is not None:
+            if self.similarity_filter is not None and clip_model is not None:
                 print(
                     f"Filtering {len(class_images)} images for class {class_name} using {self.similarity_filter} reference..."
                 )
@@ -563,6 +563,8 @@ class CIFAR10DataModule(L.LightningDataModule):
         self.val_dataset = None
         self.test_dataset = None
 
+        self.data_prepared = False
+
     def get_augmentations(self, augmentations_cfg):
         transform_list = []
         # Mapping for custom transforms.
@@ -595,6 +597,8 @@ class CIFAR10DataModule(L.LightningDataModule):
             return
 
     def prepare_data(self) -> None:
+        if self.data_prepared:
+            return
         print("Preparing data...")
         cifar10_train_path = os.path.join("./data", "cifar-10-batches-py")
         download_flag = not os.path.exists(cifar10_train_path)
@@ -624,6 +628,9 @@ class CIFAR10DataModule(L.LightningDataModule):
             keep_only_cat=self.cfg.keep_only_cat,
             download=download_flag,
             normalize_synthetic=self.cfg.normalize_synthetic,
+            similarity_filter=self.cfg.similarity_filter,
+            similarity_threshold=self.cfg.similarity_threshold,
+            reference_sample_size=self.cfg.reference_sample_size,
         )
 
         new_mean, new_std = full_train_dataset.get_new_std_mean()
@@ -654,6 +661,8 @@ class CIFAR10DataModule(L.LightningDataModule):
         class_counts = torch.bincount(train_targets)
         class_weights = 1.0 / class_counts.float()
         self.class_weights = class_weights / class_weights.sum()
+
+        self.data_prepared = True
 
     def train_dataloader(self):
         return DataLoader(
