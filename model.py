@@ -3,6 +3,7 @@ import os
 
 import lightning as L
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 import numpy as np
@@ -10,6 +11,7 @@ from omegaconf import DictConfig
 from sklearn.metrics import balanced_accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
 from torchmetrics import Accuracy, F1Score
 from torchvision import transforms
+import timm
 
 from utils import CIFAR10_CLASSES_REVERSE  # if needed
 
@@ -18,7 +20,10 @@ class ResNet18Model(L.LightningModule):
     def __init__(self, cfg: DictConfig, class_weights=None) -> None:
         super().__init__()
         self.cfg = cfg
-        self.model = torchvision.models.resnet18(num_classes=10)
+        # self.model = torchvision.models.resnet18(num_classes=10)
+        self.model = timm.create_model('resnet18', num_classes=10, pretrained=False)
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        self.maxpool = nn.Identity()
         self.class_weights = class_weights
 
         # Setup the loss: use class weights, label smoothing, or default cross entropy.

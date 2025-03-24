@@ -38,17 +38,24 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         extra_images_per_class=None,  # Dict of class_name:count pairs
         keep_only_cat=False,
         normalize_synthetic=None,  # None, 'mean_std', or 'clahe'
-        similarity_filter=None,    # None, 'original', or 'synthetic' 
+        similarity_filter=None,  # None, 'original', or 'synthetic'
         similarity_threshold=0.7,  # Threshold for similarity filtering (0.0-1.0)
         reference_sample_size=50,  # Number of reference images to use
     ) -> None:
         super().__init__(root=root, train=train, transform=transform, download=download)
 
+        orig_data = self.data.astype(np.float32) / 255.0
+        self.original_mean = np.mean(orig_data, axis=(0, 1, 2))
+        self.original_std = np.std(orig_data, axis=(0, 1, 2))
+        print(
+            f"Original dataset stats stored - Mean: {self.original_mean}, Std: {self.original_std}"
+        )
+
         # Backward compatibility
         self.downsample_class = downsample_class
         self.downsample_ratio = downsample_ratio
         self.normalize_synthetic = normalize_synthetic
-        self.similarity_filter = similarity_filter  
+        self.similarity_filter = similarity_filter
         self.similarity_threshold = similarity_threshold
         self.reference_sample_size = reference_sample_size
 
@@ -91,7 +98,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         if self.transform is None:
             return
 
-        # Calculate new mean and std based on the modified dataset
+        # Recompute normalization based on the current (modified) dataset
         data = self.data.astype(np.float32) / 255.0
         mean = np.mean(data, axis=(0, 1, 2))
         std = np.std(data, axis=(0, 1, 2))
@@ -155,10 +162,9 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         # Combine all indices
         if keep_indices:
             all_keep_indices = np.concatenate([non_downsampled_indices] + keep_indices)
-
             # Update the dataset
             self.data = self.data[all_keep_indices]
-            self.targets = list(targets[all_keep_indices])            
+            self.targets = list(targets[all_keep_indices])
 
         # For backward compatibility with keep_only_cat
         if self.keep_only_cat and self.downsample_class is not None:
@@ -193,8 +199,6 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 data_reshaped, self.targets
             )
         elif self.naive_undersample:
-            # If we have multiple classes with different ratios, calculate the target size
-            # based on the smallest downsampled class
             if self.downsample_classes:
                 targets = np.array(self.targets)
                 target_sizes = {}
@@ -237,20 +241,6 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         import torch
         from torchvision import transforms
 
-        # Configuration parameters
-        self.normalize_synthetic = getattr(
-            self, "normalize_synthetic", "mean_std"
-        )  # None, 'mean_std', or 'clahe'
-        self.similarity_filter = getattr(
-            self, "similarity_filter", None
-        )  # None, 'original', or 'synthetic'
-        self.similarity_threshold = getattr(
-            self, "similarity_threshold", 0.7
-        )  # Default threshold of 70%
-        self.reference_sample_size = getattr(
-            self, "reference_sample_size", 50
-        )  # Number of reference images
-
         image_files = glob(os.path.join(self.extra_images_dir, "*.*"))
         if not image_files:
             print(f"No images found in {self.extra_images_dir}")
@@ -269,15 +259,12 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
             except:
                 print(f"Skipping file with unexpected format: {filename}")
 
-        # Calculate dataset statistics for normalization
-        orig_mean = None
-        orig_std = None
-        if self.normalize_synthetic in ["mean_std", "clahe"]:
-            # Original dataset statistics (CIFAR-10 base)
-            orig_data = self.data.astype(np.float32) / 255.0
-            orig_mean = np.mean(orig_data, axis=(0, 1, 2))
-            orig_std = np.std(orig_data, axis=(0, 1, 2))
-            print(f"Original dataset statistics - Mean: {orig_mean}, Std: {orig_std}")
+        # Use stored original statistics (instead of recalculating from modified self.data)
+        orig_mean = self.original_mean
+        orig_std = self.original_std
+        print(
+            f"Using original dataset statistics for normalization - Mean: {orig_mean}, Std: {orig_std}"
+        )
 
         # Load CLIP model for similarity filtering if needed
         clip_model = None
@@ -287,7 +274,6 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
             print(f"Loading CLIP model for similarity filtering (device: {device})")
             clip_model, clip_preprocess = clip.load("ViT-B/32", device=device)
 
-        # Process each class
         new_images_list = []
         target_classes = []
 
@@ -302,8 +288,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
             ):
                 continue
 
-            # Determine how many images to use for this class
-            num_to_use = None
+            # Determine number of images to use for this class
             if (
                 self.extra_images_per_class
                 and class_name in self.extra_images_per_class
@@ -323,7 +308,6 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 num_to_use = len(files)
                 print(f"Adding all filtered images for class '{class_name}'")
 
-            # Load initial set of images
             class_images = []
             file_paths = []
             for fpath in files:
@@ -347,7 +331,6 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                     f"Filtering {len(class_images)} images for class {class_name} using {self.similarity_filter} reference..."
                 )
 
-                # Get embeddings for synthetic images
                 synth_embeddings = []
                 valid_indices = []
                 for i, img_arr in enumerate(class_images):
@@ -356,7 +339,6 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                         image_input = clip_preprocess(img_pil).unsqueeze(0).to(device)
                         with torch.no_grad():
                             embedding = clip_model.encode_image(image_input)
-                            # Normalize embedding
                             embedding = embedding / embedding.norm(dim=-1, keepdim=True)
                             synth_embeddings.append(embedding.cpu().numpy()[0])
                             valid_indices.append(i)
@@ -372,7 +354,6 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 # Get reference embeddings
                 ref_embeddings = None
                 if self.similarity_filter == "original":
-                    # Get embeddings from original dataset for this class
                     original_indices = [
                         i
                         for i, target in enumerate(self.targets)
@@ -384,15 +365,12 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                         )
                         self.similarity_filter = "synthetic"
                     else:
-                        # Sample reference images
                         num_refs = min(
                             self.reference_sample_size, len(original_indices)
                         )
                         ref_indices = np.random.choice(
                             original_indices, size=num_refs, replace=False
                         )
-
-                        # Compute embeddings for reference images
                         to_pil = transforms.ToPILImage()
                         ref_embeddings = []
                         for idx in ref_indices:
@@ -419,48 +397,39 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                         else:
                             ref_embeddings = np.array(ref_embeddings)
 
-                # If original reference not available or 'synthetic' was selected
                 if self.similarity_filter == "synthetic":
-                    # Use synthetic images as reference (representative subset)
                     num_refs = min(self.reference_sample_size, len(synth_embeddings))
                     ref_indices = np.random.choice(
                         len(synth_embeddings), size=num_refs, replace=False
                     )
                     ref_embeddings = synth_embeddings[ref_indices]
 
-                # Compute similarity scores
                 similarity_scores = np.dot(synth_embeddings, ref_embeddings.T).mean(
                     axis=1
                 )
-
-                # Filter by similarity threshold
                 filtered_indices = [
                     valid_indices[i]
                     for i, score in enumerate(similarity_scores)
                     if score >= self.similarity_threshold
                 ]
-
                 print(
                     f"Filtered {len(class_images)} to {len(filtered_indices)} images with similarity >= {self.similarity_threshold}"
                 )
-
-                # Take only the filtered images
                 class_images = [class_images[i] for i in filtered_indices]
                 file_paths = [file_paths[i] for i in filtered_indices]
 
-            # Apply final limit if needed
+            # Limit to num_to_use images if needed
             if num_to_use < len(class_images):
                 indices = np.random.choice(
                     len(class_images), size=num_to_use, replace=False
                 )
                 class_images = [class_images[i] for i in indices]
 
-            # Now we have our filtered and limited class images
             if not class_images:
                 print(f"No images left after filtering for class {class_name}")
                 continue
 
-            # Apply normalization if needed
+            # Apply normalization if requested using stored original stats
             if (
                 self.normalize_synthetic
                 and orig_mean is not None
@@ -469,16 +438,13 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 class_images_array = np.stack(class_images)
 
                 if self.normalize_synthetic == "mean_std":
-                    # Apply mean-std adjustment
                     synth_data = class_images_array.astype(np.float32) / 255.0
                     synth_mean = np.mean(synth_data, axis=(0, 1, 2))
                     synth_std = np.std(synth_data, axis=(0, 1, 2))
-
                     print(
                         f"Class {class_name} synthetic stats - Mean: {synth_mean}, Std: {synth_std}"
                     )
 
-                    # Normalize using mean-std adjustment
                     normalized = (
                         synth_data - synth_mean[None, None, None, :]
                     ) / synth_std[None, None, None, :]
@@ -490,23 +456,14 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                     class_images = list(normalized)
 
                 elif self.normalize_synthetic == "clahe":
-                    # Apply CLAHE normalization
                     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
                     normalized = []
-
                     for img in class_images_array:
-                        # Convert to LAB color space for better CLAHE results
                         lab = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
                         l, a, b = cv2.split(lab)
-
-                        # Apply CLAHE to the L channel
                         l_clahe = clahe.apply(l)
-
-                        # Merge channels and convert back to RGB
                         lab_clahe = cv2.merge((l_clahe, a, b))
                         rgb_clahe = cv2.cvtColor(lab_clahe, cv2.COLOR_LAB2RGB)
-
-                        # Optional: Apply mean-std adjustment after CLAHE
                         rgb_float = rgb_clahe.astype(np.float32) / 255.0
                         img_mean = np.mean(rgb_float, axis=(0, 1))
                         img_std = np.std(rgb_float, axis=(0, 1))
@@ -520,12 +477,9 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                         rgb_adjusted = np.clip(rgb_adjusted * 255, 0, 255).astype(
                             np.uint8
                         )
-
                         normalized.append(rgb_adjusted)
-
                     class_images = normalized
 
-            # Add processed images to our collection
             new_images_list.extend(class_images)
             target_classes.extend([class_idx] * len(class_images))
 
@@ -533,23 +487,18 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
             print("No valid images found to add")
             exit(1)
 
-        # Stack them into shape (N, 32, 32, 3)
         new_images = np.stack(new_images_list, axis=0)
-
         print(f"Normalization method: {self.normalize_synthetic}")
         print(f"New images shape: {new_images.shape}")
         print(f"New images range: [{new_images.min()}, {new_images.max()}]")
 
-        # Append to existing dataset data
+        # Append new images to existing dataset
         self.data = np.concatenate([self.data, new_images], axis=0)
-        # Extend targets with appropriate class indices
         self.targets.extend(target_classes)
-
         print(f"Added a total of {len(new_images_list)} new images to the dataset")
 
     # Keep original methods
     def _downsample(self) -> None:
-        # Redirect to new method for backward compatibility
         self._downsample_multiple()
 
 

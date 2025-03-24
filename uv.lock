@@ -2728,6 +2728,7 @@ dependencies = [
     { name = "scikit-learn" },
     { name = "seaborn" },
     { name = "sentencepiece" },
+    { name = "timm" },
     { name = "torch" },
     { name = "torchvision" },
     { name = "tqdm" },
@@ -2766,6 +2767,7 @@ requires-dist = [
     { name = "scikit-learn", specifier = ">=1.6.1" },
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "sentencepiece", specifier = ">=0.2.0" },
+    { name = "timm", specifier = ">=1.0.15" },
     { name = "torch", specifier = ">=2.6.0" },
     { name = "torchvision", specifier = ">=0.21.0" },
     { name = "tqdm", specifier = ">=4.67.1" },
@@ -2986,6 +2988,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a5/c0/d6d8535063e550cb8b34f1bdda08910021ca72ef2067e14c221f6cb576fa/tifffile-2025.3.13.tar.gz", hash = "sha256:30fcc4584216937b5993d0568452b6fea8e12e61f9afb1a8e967c07c281faa06", size = 366062 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0e/5c/de1baece8fe43b504fe795343012b26eb58484d63537ea3c793623bfc765/tifffile-2025.3.13-py3-none-any.whl", hash = "sha256:10f205b923c04678f744a6d553f6f86c639c9ba6e714f6758d81af0678ba75dc", size = 226833 },
+]
+
+[[package]]
+name = "timm"
+version = "1.0.15"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "huggingface-hub" },
+    { name = "pyyaml" },
+    { name = "safetensors" },
+    { name = "torch" },
+    { name = "torchvision" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bc/0c/66b0f9b4a4cb9ffdac7b52b17b37c7d3c4f75623b469e388b0c6d89b4e88/timm-1.0.15.tar.gz", hash = "sha256:756a3bc30c96565f056e608a9b559daed904617eaadb6be536f96874879b1055", size = 2230258 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6c/d0/179abca8b984b3deefd996f362b612c39da73b60f685921e6cd58b6125b4/timm-1.0.15-py3-none-any.whl", hash = "sha256:5a3dc460c24e322ecc7fd1f3e3eb112423ddee320cb059cc1956fbc9731748ef", size = 2361373 },
 ]
 
 [[package]]

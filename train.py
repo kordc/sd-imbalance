@@ -13,14 +13,9 @@ import os
 
 @hydra.main(config_path="config", config_name="config", version_base="1.2")
 def main(cfg: DictConfig) -> None:
-    L.seed_everything(cfg.seed, workers=True)
-    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-    torch.use_deterministic_algorithms(True)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    set_reproducibility(cfg)
     data_module = CIFAR10DataModule(cfg)
     data_module.prepare_data()
-    # data_module.setup("fit")
     model = ResNet18Model(cfg, class_weights=data_module.class_weights)
 
     if cfg.get("checkpoint_path"):
@@ -33,10 +28,6 @@ def main(cfg: DictConfig) -> None:
     if cfg.compile:
         model = torch.compile(model)
     torch.set_float32_matmul_precision("medium")
-
-    if cfg.get("visualize_feature_maps", False):
-        visualize_feature_maps(model, data_module)
-        return
     
     config_dict = OmegaConf.to_container(cfg, resolve=True)
     wandb_logger = WandbLogger(project="cifar10_project", log_model=True)
@@ -73,9 +64,13 @@ def main(cfg: DictConfig) -> None:
             )
         if filter_img is not None:
             wandb.log({"conv_filters": wandb.Image(filter_img, caption="Conv Filters")})
-        # if gradcam_img:
-        #     wandb.log({"gradcam": wandb.Image(gradcam_img, caption="GradCAM Results")})
 
+def set_reproducibility(cfg):
+    L.seed_everything(cfg.seed, workers=True)
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 if __name__ == "__main__":
     main()

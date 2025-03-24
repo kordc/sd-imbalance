@@ -4,8 +4,6 @@ hydra:
   job:
     chdir: False  # Do not change the working directory.
 
-dynamic_upsample: False
-num_dynamic_upsample: 50
 
 downsample_class: # Class to downsample, e.g., "cat"
 downsample_ratio: 0.01 # How many examples to keep
@@ -16,8 +14,6 @@ smote: false
 adasyn: false
 label_smoothing: false
 class_weighting: false
-add_extra_images: True
-extra_images_dir: /home/karol/sd-imbalance/flux_tests
 max_extra_images: 4950
 name: base
 epochs: 100
@@ -28,18 +24,11 @@ val_size: 0.2
 num_workers: 2
 seed: 42
 augmentations:
-    # - name: FluxReduxAugment
-    #   params:
-    #     guidance_scale: 2.5
-    #     num_inference_steps: 50
-    #     seed: 0
-    #     device: "cuda"
-    #     probability: 0.3
     - name: ToTensor
     - name: Normalize
       params:
-          mean: [0.485, 0.456, 0.406]
-          std: [0.229, 0.224, 0.225]
+          mean: [0.49139968, 0.48215827, 0.44653124]
+          std: [0.24703233, 0.24348505, 0.26158768]
     - name: RandomCrop
       params:
           size: 32
@@ -47,7 +36,6 @@ augmentations:
     - name: RandomHorizontalFlip
       params:
           p: 0.5
-    # Resize to 32x32
     - name: Resize
       params:
           size: 32
@@ -56,17 +44,18 @@ test_augmentations:
     - name: ToTensor
     - name: Normalize
       params:
-          mean: [0.485, 0.456, 0.406]
-          std: [0.229, 0.224, 0.225]
+          mean: [0.49139968, 0.48215827, 0.44653124]
+          std: [0.24703233, 0.24348505, 0.26158768]
     - name: Resize
       params:
           size: 32
           interpolation: "nearest"
 
 checkpoint_path: 
-visualize_feature_maps: False  # Set to true to only visualize feature maps
 visualize_trained_model: True
 
+add_extra_images: False
+extra_images_dir: /home/karol/sd-imbalance/flux_tests
 downsample_classes:
   "airplane": 1
   "automobile": 1
@@ -78,9 +67,6 @@ downsample_classes:
   "horse": 1
   "ship": 1
   "truck": 1
-
-
-# Multi-class image addition
 extra_images_per_class:
   "airplane": 0
   "automobile": 0
@@ -92,6 +78,9 @@ extra_images_per_class:
   "horse": 0
   "ship": 0
   "truck": 0
+
+dynamic_upsample: False
+num_dynamic_upsample: 50
 
 normalize_synthetic: 'mean_std'  # None, 'mean_std', or 'clahe'
 similarity_filter:   # None, 'original', or 'synthetic'
