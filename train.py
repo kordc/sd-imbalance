@@ -7,7 +7,7 @@ from omegaconf import DictConfig, OmegaConf
 import wandb
 from data import CIFAR10DataModule
 from model import ResNet18Model
-from utils import visualize_feature_maps, visualize_filters
+from utils import visualize_feature_maps, visualize_filters, CIFAR10_CLASSES
 
 import os
 
@@ -47,6 +47,8 @@ def main(cfg: DictConfig) -> None:
     trainer.test(model, datamodule=data_module)
 
     if cfg.fine_tune_on_real_data:
+        print(cfg)
+        wandb_logger2 = WandbLogger(project="cifar10_project", log_model=True)
         # Fine-tune the model on real data
         cfg.downsample_class = None
         cfg.naive_oversample = False
@@ -56,11 +58,11 @@ def main(cfg: DictConfig) -> None:
         cfg.adasyn = False
         cfg.label_smoothing = False
         cfg.class_weighting = False
-        cfg.epoch = 10
+        cfg.epochs = 10
         cfg.add_extra_images = False
-        for class_name in data_module.class_names:
-            cfg.downsample_classes["class_name"] = 1
-            cfg.extra_images_per_class["class_name"] = 0
+        for class_name in CIFAR10_CLASSES:
+            cfg.downsample_classes[class_name] = 0.1
+            cfg.extra_images_per_class[class_name] = 0
         cfg.dynamic_upsample = False
         cfg.cutmix_or_mixup = False
         cfg.name += "_fine_tuned"
@@ -72,11 +74,15 @@ def main(cfg: DictConfig) -> None:
             max_epochs=cfg.epochs,
             accelerator="auto",
             devices="auto",
-            logger=[wandb_logger],
+            logger=[wandb_logger2],
             log_every_n_steps=1,
             check_val_every_n_epoch=1,
         )
         model = ResNet18Model(cfg, class_weights=data_module.class_weights)
+        if cfg.freeze_backbone:
+            model.freeze_backbone()
+        if cfg.compile:
+            model = torch.compile(model)
         fine_tune_trainer.fit(model, datamodule=data_module)
         fine_tune_trainer.test(model, datamodule=data_module)
 

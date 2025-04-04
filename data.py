@@ -514,6 +514,10 @@ class CIFAR10DataModule(L.LightningDataModule):
                     "bilinear": Image.BILINEAR,
                     "bicubic": Image.BICUBIC,
                     "lanczos": Image.LANCZOS,
+                    0: Image.NEAREST,
+                    1: Image.BILINEAR,
+                    2: Image.BICUBIC,
+                    3: Image.LANCZOS,
                 }
                 params["interpolation"] = interpolation_dict[params["interpolation"]]
                 transform_list.append(getattr(transforms, aug_name)(**params))

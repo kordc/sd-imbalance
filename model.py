@@ -71,6 +71,17 @@ class ResNet18Model(L.LightningModule):
     def forward(self, x):
         return self.model(x)
 
+    def freeze_backbone(self):
+        """Freezes the backbone of the model, allowing only the final layer to be trained."""
+        for param in self.model.parameters():
+            param.requires_grad = False
+            # Freeze the maxpool layer
+            # for param in self.maxpool.parameters():
+            #     param.requires_grad = True
+            # Unfreeze the last fully connected layer
+        for param in self.model.fc.parameters():
+            param.requires_grad = True
+
     def visualize_feature_maps(self, x):
         """Registers a forward hook on a chosen layer (here layer1)
         and returns the feature maps produced for the input x.
