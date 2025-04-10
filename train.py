@@ -45,10 +45,17 @@ def main(cfg: DictConfig) -> None:
 
     trainer.fit(model, datamodule=data_module)
     trainer.test(model, datamodule=data_module)
+    
 
     if cfg.fine_tune_on_real_data:
-        print(cfg)
+        wandb.finish()
         wandb_logger2 = WandbLogger(project="cifar10_project", log_model=True)
+        wandb.init(
+            config=config_dict,
+            project="cifar10_project",
+            name=cfg.name + "_fine_tuned",
+            resume="allow",
+        )
         # Fine-tune the model on real data
         cfg.downsample_class = None
         cfg.naive_oversample = False
@@ -58,7 +65,7 @@ def main(cfg: DictConfig) -> None:
         cfg.adasyn = False
         cfg.label_smoothing = False
         cfg.class_weighting = False
-        cfg.epochs = 10
+        cfg.epochs = 100
         cfg.add_extra_images = False
         for class_name in CIFAR10_CLASSES:
             cfg.downsample_classes[class_name] = 0.1
@@ -66,7 +73,7 @@ def main(cfg: DictConfig) -> None:
         cfg.dynamic_upsample = False
         cfg.cutmix_or_mixup = False
         cfg.name += "_fine_tuned"
-        cfg.naive_undersample = True
+        # cfg.naive_undersample = True
         data_module = CIFAR10DataModule(cfg)
         data_module.prepare_data()
 

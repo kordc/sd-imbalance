@@ -244,7 +244,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         for fpath in image_files:
             filename = os.path.basename(fpath)
             try:
-                class_name = filename.split("_")[1]
+                class_name = filename.split("_")[1][:-4]
                 if class_name in CIFAR10_CLASSES:
                     class_to_files.setdefault(class_name, []).append(fpath)
             except Exception as e:

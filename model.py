@@ -37,7 +37,7 @@ class ResNet18Model(L.LightningModule):
         if self.class_weights is not None:
             self.criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
         elif cfg.label_smoothing:
-            self.criterion = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
+            self.criterion = torch.nn.CrossEntropyLoss(label_smoothing=0.3)
         else:
             self.criterion = torch.nn.CrossEntropyLoss()
 
@@ -70,15 +70,56 @@ class ResNet18Model(L.LightningModule):
 
     def forward(self, x):
         return self.model(x)
+    
+    def custom_cutmix_cat(self, inputs, labels, beta=1.0):
+        """
+        Applies CutMix only for images belonging to the cat class (index 3).
+        For each cat image in the batch, a different cat image is selected (if available)
+        and a random patch from it is pasted over the original image.
+        Since both images are cats, the label remains unchanged.
+        """
+        # Find indices for images with label==3 (cat)
+        cat_indices = (labels == 3).nonzero(as_tuple=True)[0]
+        if len(cat_indices) < 2:
+            # Not enough cat images to perform cutmix
+            return inputs, labels
+
+        new_inputs = inputs.clone()
+        # For each cat sample, select a different random cat image to mix
+        permuted = cat_indices[torch.randperm(len(cat_indices))]
+        for idx1, idx2 in zip(cat_indices, permuted):
+            if idx1 == idx2:
+                continue  # ensure a different image is chosen
+
+            # Sample a lambda value from Beta distribution for this pair
+            lam = np.random.beta(beta, beta)
+            _, _, H, W = inputs.shape
+
+            # Determine the patch size based on lambda
+            cut_ratio = np.sqrt(1 - lam)
+            cut_w = int(W * cut_ratio)
+            cut_h = int(H * cut_ratio)
+
+            # Choose random location for the patch
+            cx = np.random.randint(W)
+            cy = np.random.randint(H)
+            x1 = np.clip(cx - cut_w // 2, 0, W)
+            y1 = np.clip(cy - cut_h // 2, 0, H)
+            x2 = np.clip(cx + cut_w // 2, 0, W)
+            y2 = np.clip(cy + cut_h // 2, 0, H)
+
+            # Replace region in image idx1 with patch from image idx2
+            new_inputs[idx1, :, y1:y2, x1:x2] = inputs[idx2, :, y1:y2, x1:x2]
+            # Note: Since both images are of the same class (cat), we leave the label unchanged.
+        return new_inputs, labels
 
     def freeze_backbone(self):
         """Freezes the backbone of the model, allowing only the final layer to be trained."""
+        # Freeze all backbone parameters
         for param in self.model.parameters():
             param.requires_grad = False
-            # Freeze the maxpool layer
-            # for param in self.maxpool.parameters():
-            #     param.requires_grad = True
-            # Unfreeze the last fully connected layer
+        
+        # Unfreeze the classification fc (last layer)
         for param in self.model.fc.parameters():
             param.requires_grad = True
 
@@ -101,7 +142,9 @@ class ResNet18Model(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         inputs, labels = batch
-        if self.cfg.get("cutmix_or_mixup", False):
+        if self.cfg.get("cutmix_cat_only", False):
+            inputs, labels = self.custom_cutmix_cat(inputs, labels)
+        elif self.cfg.get("cutmix_or_mixup", False):
             inputs, labels = self.cutmix_or_mixup(
                 inputs,
                 labels,
@@ -110,7 +153,7 @@ class ResNet18Model(L.LightningModule):
         loss = self.criterion(outputs, labels)
 
         preds = torch.argmax(outputs, dim=1)
-        if self.cfg.get("cutmix_or_mixup", False):
+        if self.cfg.get("cutmix_or_mixup", False) and not self.cfg.get("cutmix_cat_only", False):
             labels = torch.argmax(labels, dim=1)
         self.train_accuracy(preds, labels)
         self.train_f1(preds, labels)
