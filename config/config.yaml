@@ -47,7 +47,7 @@ checkpoint_path:
 visualize_trained_model: True
 
 add_extra_images: True
-extra_images_dir: /home/karol/sd-imbalance/sdxl_turbo_diverse
+extra_images_dir: /home/karol/sd-imbalance/flux_modified
 downsample_classes:
   "airplane": 1
   "automobile": 1

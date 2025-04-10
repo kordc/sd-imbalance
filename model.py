@@ -59,8 +59,8 @@ class ResNet18Model(L.LightningModule):
         self.test_support = None
 
         # To track all predictions and targets for more detailed metrics at epoch end
-        self.val_preds = []
-        self.val_targets = []
+        self.val_preds = {}  # Keys will be dataloader_idx (0, 1, ...)
+        self.val_targets = {}
         self.test_preds = []
         self.test_targets = []
 
@@ -197,23 +197,26 @@ class ResNet18Model(L.LightningModule):
         self.val_accuracy(preds, labels)
         self.val_f1(preds, labels)
 
-        # Store predictions and targets for detailed metrics at epoch end
-        self.val_preds.append(preds.cpu())
-        self.val_targets.append(labels.cpu())
+        # Initialize the lists for this dataloader_idx if they don't exist yet.
+        if dataloader_idx not in self.val_preds:
+            self.val_preds[dataloader_idx] = []
+            self.val_targets[dataloader_idx] = []
+
+        self.val_preds[dataloader_idx].append(preds.cpu())
+        self.val_targets[dataloader_idx].append(labels.cpu())
 
         balanced_acc = balanced_accuracy_score(
             labels.cpu().numpy(),
             preds.cpu().numpy(),
         )
-
-        # Update confusion matrix for this dataloader.
+        
+        # (Rest of your logic for confusion matrix and support remains unchanged)
         current_conf = confusion_matrix(labels.cpu(), preds.cpu(), labels=range(10))
         if dataloader_idx not in self.val_confusion_matrices:
             self.val_confusion_matrices[dataloader_idx] = current_conf
         else:
             self.val_confusion_matrices[dataloader_idx] += current_conf
 
-        # Track support per class
         support_count = np.bincount(labels.cpu().numpy(), minlength=10)
         if dataloader_idx not in self.val_support:
             self.val_support[dataloader_idx] = support_count
@@ -313,113 +316,59 @@ class ResNet18Model(L.LightningModule):
             self.dynamic_upsample()
 
     def on_validation_epoch_end(self) -> None:
-        # Combine all predictions and targets
-        all_val_preds = (
-            torch.cat(self.val_preds) if self.val_preds else torch.tensor([])
-        )
-        all_val_targets = (
-            torch.cat(self.val_targets) if self.val_targets else torch.tensor([])
-        )
-
         for dataloader_idx, conf_matrix in self.val_confusion_matrices.items():
+            # Retrieve the corresponding predictions and targets.
+            preds_list = self.val_preds[dataloader_idx]
+            targets_list = self.val_targets[dataloader_idx]
+            all_val_preds = torch.cat(preds_list)
+            all_val_targets = torch.cat(targets_list)
+            
             name = "val" if dataloader_idx == 0 else "clean_val"
-
-            # Per-class metrics
+            
+            # Per-class accuracy from the confusion matrix.
             per_class_accuracy = conf_matrix.diagonal() / conf_matrix.sum(axis=1)
 
-            # Get per-class support
-            class_support = self.val_support[dataloader_idx]
-
-            # Calculate per-class F1, precision, and recall
+            # Compute per-class metrics based on the predictions for this particular set.
             y_pred = all_val_preds.numpy()
             y_true = all_val_targets.numpy()
-
-            # Per-class F1, precision, and recall
-            f1_per_class = f1_score(
-                y_true, y_pred, labels=range(10), average=None, zero_division=0
-            )
-            precision_per_class = precision_score(
-                y_true, y_pred, labels=range(10), average=None, zero_division=0
-            )
-            recall_per_class = recall_score(
-                y_true, y_pred, labels=range(10), average=None, zero_division=0
-            )
-
-            # Class imbalance ratio (percentage of each class)
+            f1_per_class = f1_score(y_true, y_pred, labels=range(10), average=None, zero_division=0)
+            precision_per_class = precision_score(y_true, y_pred, labels=range(10), average=None, zero_division=0)
+            recall_per_class = recall_score(y_true, y_pred, labels=range(10), average=None, zero_division=0)
+            
+            # Class imbalance (support) for each class already computed per dataloader.
+            class_support = self.val_support[dataloader_idx]
             total_samples = class_support.sum()
-            class_ratios = (
-                class_support / total_samples
-                if total_samples > 0
-                else np.zeros_like(class_support)
-            )
-
-            # Log all metrics
+            class_ratios = (class_support / total_samples) if total_samples > 0 else np.zeros_like(class_support)
+            
             for class_idx in range(10):
+                from utils import CIFAR10_CLASSES_REVERSE  # if not already imported
                 class_name = CIFAR10_CLASSES_REVERSE[class_idx]
-                self.log(
-                    f"{name}_accuracy_{class_name}",
-                    per_class_accuracy[class_idx],
-                    on_step=False,
-                    on_epoch=True,
-                    prog_bar=False,
-                )
-                self.log(
-                    f"{name}_f1_{class_name}",
-                    f1_per_class[class_idx],
-                    on_step=False,
-                    on_epoch=True,
-                    prog_bar=False,
-                )
-                self.log(
-                    f"{name}_precision_{class_name}",
-                    precision_per_class[class_idx],
-                    on_step=False,
-                    on_epoch=True,
-                    prog_bar=False,
-                )
-                self.log(
-                    f"{name}_recall_{class_name}",
-                    recall_per_class[class_idx],
-                    on_step=False,
-                    on_epoch=True,
-                    prog_bar=False,
-                )
-                self.log(
-                    f"{name}_support_{class_name}",
-                    class_support[class_idx],
-                    on_step=False,
-                    on_epoch=True,
-                    prog_bar=False,
-                )
-                self.log(
-                    f"{name}_class_ratio_{class_name}",
-                    class_ratios[class_idx],
-                    on_step=False,
-                    on_epoch=True,
-                    prog_bar=False,
-                )
+                self.log(f"{name}_accuracy_{class_name}", per_class_accuracy[class_idx],
+                        on_step=False, on_epoch=True, prog_bar=False)
+                self.log(f"{name}_f1_{class_name}", f1_per_class[class_idx],
+                        on_step=False, on_epoch=True, prog_bar=False)
+                self.log(f"{name}_precision_{class_name}", precision_per_class[class_idx],
+                        on_step=False, on_epoch=True, prog_bar=False)
+                self.log(f"{name}_recall_{class_name}", recall_per_class[class_idx],
+                        on_step=False, on_epoch=True, prog_bar=False)
+                self.log(f"{name}_support_{class_name}", class_support[class_idx],
+                        on_step=False, on_epoch=True, prog_bar=False)
+                self.log(f"{name}_class_ratio_{class_name}", class_ratios[class_idx],
+                        on_step=False, on_epoch=True, prog_bar=False)
 
-            # Log imbalance metrics
             max_support = class_support.max()
             min_support = class_support.min() if class_support.sum() > 0 else 0
-            imbalance_ratio = (
-                max_support / min_support if min_support > 0 else float("inf")
-            )
-            self.log(
-                f"{name}_imbalance_ratio",
-                imbalance_ratio,
-                on_step=False,
-                on_epoch=True,
-                prog_bar=False,
-            )
+            imbalance_ratio = max_support / min_support if min_support > 0 else float("inf")
+            self.log(f"{name}_imbalance_ratio", imbalance_ratio,
+                    on_step=False, on_epoch=True, prog_bar=False)
 
-        # Reset metrics and storage
+        # Reset metrics and storage for the next epoch.
         self.val_accuracy.reset()
         self.val_f1.reset()
         self.val_confusion_matrices = {}
         self.val_support = {}
-        self.val_preds = []
-        self.val_targets = []
+        self.val_preds = {}
+        self.val_targets = {}
 
     def on_test_epoch_end(self) -> None:
         if self.test_confusion_matrix is not None and self.test_preds:
