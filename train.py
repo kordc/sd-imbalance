@@ -31,8 +31,8 @@ def main(cfg: DictConfig) -> None:
     torch.set_float32_matmul_precision("medium")
 
     config_dict = OmegaConf.to_container(cfg, resolve=True)
-    wandb_logger = WandbLogger(project="cifar10_project", log_model=True)
-    wandb.init(config=config_dict, project="cifar10_project", name=cfg.name)
+    wandb_logger = WandbLogger(project=cfg.project, log_model=True)
+    wandb.init(config=config_dict, project=cfg.project, name=cfg.name)
 
     trainer = L.Trainer(
         max_epochs=cfg.epochs,
@@ -48,10 +48,10 @@ def main(cfg: DictConfig) -> None:
 
     if cfg.fine_tune_on_real_data:
         print(cfg)
-        wandb_logger2 = WandbLogger(project="cifar10_project", log_model=True)
+        wandb_logger2 = WandbLogger(project=cfg.project, log_model=True)
         wandb.init(
             config=config_dict,
-            project="cifar10_project",
+            project=cfg.project,
             name=cfg.name + "_fine_tuned",
             resume="allow",
         )

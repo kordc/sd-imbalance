@@ -523,10 +523,28 @@ class ResNet18Model(L.LightningModule):
             momentum=0.9,
             weight_decay=5e-4,
         )
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer,
-            T_max=self.cfg.epochs,
+        
+        # Linear warm-up for 5 epochs
+        warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+            optimizer, 
+            start_factor=0.1,  # Start with lr * 0.1
+            end_factor=1.0,    # End with lr
+            total_iters=5      # 5 epochs
         )
+        
+        # Cosine annealing for the remaining epochs
+        cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=self.cfg.epochs - 5,  # Remaining epochs after warm-up
+        )
+        
+        # Combine the schedulers
+        scheduler = torch.optim.lr_scheduler.SequentialLR(
+            optimizer, 
+            schedulers=[warmup_scheduler, cosine_scheduler],
+            milestones=[5]  # Switch from warmup to cosine at epoch 5
+        )
+        
         return [optimizer], [scheduler]
 
     def dynamic_upsample(self) -> None:
