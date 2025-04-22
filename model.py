@@ -70,7 +70,7 @@ class ResNet18Model(L.LightningModule):
 
     def forward(self, x):
         return self.model(x)
-    
+
     def custom_cutmix_cat(self, inputs, labels, beta=1.0):
         """
         Applies CutMix only for images belonging to the cat class (index 3).
@@ -118,7 +118,7 @@ class ResNet18Model(L.LightningModule):
         # Freeze all backbone parameters
         for param in self.model.parameters():
             param.requires_grad = False
-        
+
         # Unfreeze the classification fc (last layer)
         for param in self.model.fc.parameters():
             param.requires_grad = True
@@ -153,7 +153,9 @@ class ResNet18Model(L.LightningModule):
         loss = self.criterion(outputs, labels)
 
         preds = torch.argmax(outputs, dim=1)
-        if self.cfg.get("cutmix_or_mixup", False) and not self.cfg.get("cutmix_cat_only", False):
+        if self.cfg.get("cutmix_or_mixup", False) and not self.cfg.get(
+            "cutmix_cat_only", False
+        ):
             labels = torch.argmax(labels, dim=1)
         self.train_accuracy(preds, labels)
         self.train_f1(preds, labels)
@@ -209,7 +211,7 @@ class ResNet18Model(L.LightningModule):
             labels.cpu().numpy(),
             preds.cpu().numpy(),
         )
-        
+
         # (Rest of your logic for confusion matrix and support remains unchanged)
         current_conf = confusion_matrix(labels.cpu(), preds.cpu(), labels=range(10))
         if dataloader_idx not in self.val_confusion_matrices:
@@ -322,45 +324,93 @@ class ResNet18Model(L.LightningModule):
             targets_list = self.val_targets[dataloader_idx]
             all_val_preds = torch.cat(preds_list)
             all_val_targets = torch.cat(targets_list)
-            
+
             name = "val" if dataloader_idx == 0 else "clean_val"
-            
+
             # Per-class accuracy from the confusion matrix.
             per_class_accuracy = conf_matrix.diagonal() / conf_matrix.sum(axis=1)
 
             # Compute per-class metrics based on the predictions for this particular set.
             y_pred = all_val_preds.numpy()
             y_true = all_val_targets.numpy()
-            f1_per_class = f1_score(y_true, y_pred, labels=range(10), average=None, zero_division=0)
-            precision_per_class = precision_score(y_true, y_pred, labels=range(10), average=None, zero_division=0)
-            recall_per_class = recall_score(y_true, y_pred, labels=range(10), average=None, zero_division=0)
-            
+            f1_per_class = f1_score(
+                y_true, y_pred, labels=range(10), average=None, zero_division=0
+            )
+            precision_per_class = precision_score(
+                y_true, y_pred, labels=range(10), average=None, zero_division=0
+            )
+            recall_per_class = recall_score(
+                y_true, y_pred, labels=range(10), average=None, zero_division=0
+            )
+
             # Class imbalance (support) for each class already computed per dataloader.
             class_support = self.val_support[dataloader_idx]
             total_samples = class_support.sum()
-            class_ratios = (class_support / total_samples) if total_samples > 0 else np.zeros_like(class_support)
-            
+            class_ratios = (
+                (class_support / total_samples)
+                if total_samples > 0
+                else np.zeros_like(class_support)
+            )
+
             for class_idx in range(10):
                 from utils import CIFAR10_CLASSES_REVERSE  # if not already imported
+
                 class_name = CIFAR10_CLASSES_REVERSE[class_idx]
-                self.log(f"{name}_accuracy_{class_name}", per_class_accuracy[class_idx],
-                        on_step=False, on_epoch=True, prog_bar=False)
-                self.log(f"{name}_f1_{class_name}", f1_per_class[class_idx],
-                        on_step=False, on_epoch=True, prog_bar=False)
-                self.log(f"{name}_precision_{class_name}", precision_per_class[class_idx],
-                        on_step=False, on_epoch=True, prog_bar=False)
-                self.log(f"{name}_recall_{class_name}", recall_per_class[class_idx],
-                        on_step=False, on_epoch=True, prog_bar=False)
-                self.log(f"{name}_support_{class_name}", class_support[class_idx],
-                        on_step=False, on_epoch=True, prog_bar=False)
-                self.log(f"{name}_class_ratio_{class_name}", class_ratios[class_idx],
-                        on_step=False, on_epoch=True, prog_bar=False)
+                self.log(
+                    f"{name}_accuracy_{class_name}",
+                    per_class_accuracy[class_idx],
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                )
+                self.log(
+                    f"{name}_f1_{class_name}",
+                    f1_per_class[class_idx],
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                )
+                self.log(
+                    f"{name}_precision_{class_name}",
+                    precision_per_class[class_idx],
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                )
+                self.log(
+                    f"{name}_recall_{class_name}",
+                    recall_per_class[class_idx],
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                )
+                self.log(
+                    f"{name}_support_{class_name}",
+                    class_support[class_idx],
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                )
+                self.log(
+                    f"{name}_class_ratio_{class_name}",
+                    class_ratios[class_idx],
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                )
 
             max_support = class_support.max()
             min_support = class_support.min() if class_support.sum() > 0 else 0
-            imbalance_ratio = max_support / min_support if min_support > 0 else float("inf")
-            self.log(f"{name}_imbalance_ratio", imbalance_ratio,
-                    on_step=False, on_epoch=True, prog_bar=False)
+            imbalance_ratio = (
+                max_support / min_support if min_support > 0 else float("inf")
+            )
+            self.log(
+                f"{name}_imbalance_ratio",
+                imbalance_ratio,
+                on_step=False,
+                on_epoch=True,
+                prog_bar=False,
+            )
 
         # Reset metrics and storage for the next epoch.
         self.val_accuracy.reset()

@@ -12,7 +12,9 @@ destination_dir = "cats_chosen"
 os.makedirs(destination_dir, exist_ok=True)
 
 # Get all files in the source directory
-all_files = [f for f in os.listdir(source_dir) if os.path.isfile(os.path.join(source_dir, f))]
+all_files = [
+    f for f in os.listdir(source_dir) if os.path.isfile(os.path.join(source_dir, f))
+]
 
 # Randomly select 50 files
 selected_files = random.sample(all_files, 50)
