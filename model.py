@@ -142,9 +142,7 @@ class ResNet18Model(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         inputs, labels = batch
-        if self.cfg.get("cutmix_cat_only", False):
-            inputs, labels = self.custom_cutmix_cat(inputs, labels)
-        elif self.cfg.get("cutmix_or_mixup", False):
+        if self.cfg.get("cutmix_or_mixup", False):
             inputs, labels = self.cutmix_or_mixup(
                 inputs,
                 labels,
@@ -153,9 +151,7 @@ class ResNet18Model(L.LightningModule):
         loss = self.criterion(outputs, labels)
 
         preds = torch.argmax(outputs, dim=1)
-        if self.cfg.get("cutmix_or_mixup", False) and not self.cfg.get(
-            "cutmix_cat_only", False
-        ):
+        if self.cfg.get("cutmix_or_mixup", False):
             labels = torch.argmax(labels, dim=1)
         self.train_accuracy(preds, labels)
         self.train_f1(preds, labels)

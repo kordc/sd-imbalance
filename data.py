@@ -23,8 +23,6 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         train=True,
         transform=None,
         download=True,
-        downsample_class=None,  # Single class or None
-        downsample_ratio=1.0,  # Single ratio
         downsample_classes=None,  # Dict of class_name:ratio pairs
         naive_oversample=False,
         naive_undersample=False,
@@ -33,9 +31,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         random_state=42,
         add_extra_images=False,
         extra_images_dir="extra-images",
-        max_extra_images=None,  # Single limit
         extra_images_per_class=None,  # Dict of class_name:count pairs
-        keep_only_cat=False,
         normalize_synthetic=None,  # None, 'mean_std', or 'clahe'
         similarity_filter=None,  # None, 'original', or 'synthetic'
         similarity_threshold=0.7,  # Threshold for similarity filtering (0.0-1.0)
@@ -50,9 +46,6 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
             f"Original dataset stats stored - Mean: {self.original_mean}, Std: {self.original_std}"
         )
 
-        # Backward compatibility
-        self.downsample_class = downsample_class
-        self.downsample_ratio = downsample_ratio
         self.normalize_synthetic = normalize_synthetic
         self.similarity_filter = similarity_filter
         self.similarity_threshold = similarity_threshold
@@ -60,10 +53,6 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
 
         # New multi-class configuration
         self.downsample_classes = downsample_classes or {}
-
-        # If single downsample_class and ratio are provided, convert to downsample_classes dict
-        if self.downsample_class is not None and not self.downsample_classes:
-            self.downsample_classes = {self.downsample_class: self.downsample_ratio}
 
         self.naive_oversample = naive_oversample
         self.naive_undersample = naive_undersample
@@ -74,10 +63,8 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         # Image addition parameters
         self.add_extra_images = add_extra_images
         self.extra_images_dir = extra_images_dir
-        self.max_extra_images = max_extra_images
         self.extra_images_per_class = extra_images_per_class or {}
 
-        self.keep_only_cat = keep_only_cat
         self._extra_images_added = False  # Flag to avoid adding twice
 
         if self.downsample_classes:
@@ -138,11 +125,6 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
             else:
                 class_id_ratios[class_name] = ratio
 
-        # For backward compatibility
-        if self.downsample_class is not None:
-            if isinstance(self.downsample_class, str):
-                self.downsample_class = CIFAR10_CLASSES.get(self.downsample_class)
-
         # Process each class to downsample
         for class_id, ratio in class_id_ratios.items():
             if class_id in np.unique(targets):
@@ -161,13 +143,6 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
             all_keep_indices = np.concatenate([non_downsampled_indices] + keep_indices)
             self.data = self.data[all_keep_indices]
             self.targets = list(targets[all_keep_indices])
-
-        # For backward compatibility with keep_only_cat
-        if self.keep_only_cat and self.downsample_class is not None:
-            updated_targets = np.array(self.targets)
-            mask = updated_targets == self.downsample_class
-            self.data = self.data[mask]
-            self.targets = [self.downsample_class] * len(self.data)
 
     def _apply_resampling(self):
         """Apply resampling methods (SMOTE, ADASYN, etc.) after downsampling."""
@@ -269,11 +244,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         for class_name, files in class_to_files.items():
             class_idx = CIFAR10_CLASSES[class_name]
 
-            if (
-                self.downsample_class is not None
-                and class_idx != self.downsample_class
-                and not self.extra_images_per_class
-            ):
+            if self.extra_images_per_class:
                 continue
 
             if (
@@ -283,13 +254,6 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 num_to_use = self.extra_images_per_class[class_name]
                 print(
                     f"Adding up to {num_to_use} images for class '{class_name}' (per-class config)"
-                )
-            elif (
-                self.max_extra_images is not None and self.downsample_class is not None
-            ):
-                num_to_use = self.max_extra_images
-                print(
-                    f"Adding up to {num_to_use} images for class '{class_name}' (global limit)"
                 )
             else:
                 num_to_use = len(files)
@@ -443,7 +407,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                     normalized = []
                     for img in class_images_array:
                         lab = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
-                        l, a, b = cv2.split(lab)
+                        l, a, b = cv2.split(lab)  # noqa: E741
                         l_clahe = clahe.apply(l)
                         lab_clahe = cv2.merge((l_clahe, a, b))
                         rgb_clahe = cv2.cvtColor(lab_clahe, cv2.COLOR_LAB2RGB)
@@ -543,8 +507,6 @@ class CIFAR10DataModule(L.LightningDataModule):
             root="./data",
             train=True,
             transform=self.transform,
-            downsample_class=self.cfg.downsample_class,
-            downsample_ratio=self.cfg.downsample_ratio,
             downsample_classes=downsample_classes,
             naive_oversample=self.cfg.naive_oversample,
             naive_undersample=self.cfg.naive_undersample,
@@ -553,9 +515,7 @@ class CIFAR10DataModule(L.LightningDataModule):
             random_state=self.cfg.seed,
             add_extra_images=self.cfg.add_extra_images,
             extra_images_dir=self.cfg.extra_images_dir,
-            max_extra_images=self.cfg.max_extra_images,
             extra_images_per_class=extra_images_per_class,
-            keep_only_cat=self.cfg.keep_only_cat,
             download=download_flag,
             normalize_synthetic=self.cfg.normalize_synthetic,
             similarity_filter=self.cfg.similarity_filter,

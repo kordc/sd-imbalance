@@ -4,25 +4,31 @@ hydra:
   job:
     chdir: False  # Do not change the working directory.
 
-
-downsample_class: # Class to downsample, e.g., "cat"
-downsample_ratio: 0.1 # How many examples to keep
+# Oversampling, Undersampling and regularization methods
 naive_oversample: false
-naive_undersample: false
-keep_only_cat: false
 smote: false
 adasyn: false
+naive_undersample: false
 label_smoothing: false
 class_weighting: false
-max_extra_images: 4500
-name: base
+
+# Wandb
+name: base # WANDB project name
+
+# Project/model settings
 epochs: 100
-compile: False
-batch_size: 128
+compile: True
+batch_size: 256
 learning_rate: 0.1
 val_size: 0.2
 num_workers: 2
 seed: 42
+checkpoint_path: 
+visualize_trained_model: True
+freeze_backbone: False
+fine_tune_on_real_data: False
+
+# Dataset settings
 augmentations:
     - name: ToTensor
     - name: RandomCrop
@@ -42,11 +48,11 @@ test_augmentations:
       params:
           size: 32
           interpolation: "nearest"
+cutmix_or_mixup: False
 
-checkpoint_path: 
-visualize_trained_model: True
 
-add_extra_images: True
+# Extra images settings
+add_extra_images: False
 extra_images_dir: /home/karol/sd-imbalance/flux_modified
 downsample_classes:
   "airplane": 1
@@ -70,17 +76,11 @@ extra_images_per_class:
   "horse": 0
   "ship": 0
   "truck": 0
-
-dynamic_upsample: False
-num_dynamic_upsample: 50
-
 normalize_synthetic: 'mean_std'  # None, 'mean_std', or 'clahe'
 similarity_filter:   # None, 'original', or 'synthetic'
 similarity_threshold: 0.8      # Threshold for similarity filtering
 reference_sample_size: 50        # Number of reference images to use
 
-cutmix_or_mixup: False
-fine_tune_on_real_data: True
-cutmix_cat_only: False
-
-freeze_backbone: True
+# Dynamic upsampling via active learning
+dynamic_upsample: False
+num_dynamic_upsample: 50
