@@ -244,7 +244,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         for class_name, files in class_to_files.items():
             class_idx = CIFAR10_CLASSES[class_name]
 
-            if self.extra_images_per_class:
+            if not self.extra_images_per_class:
                 continue
 
             if (
