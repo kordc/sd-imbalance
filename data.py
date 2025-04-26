@@ -252,9 +252,16 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 and class_name in self.extra_images_per_class
             ):
                 num_to_use = self.extra_images_per_class[class_name]
-                print(
-                    f"Adding up to {num_to_use} images for class '{class_name}' (per-class config)"
-                )
+                if num_to_use == 0:
+                    print(
+                        f"Skipping class '{class_name}' as per-class config is set to 0"
+                    )
+                    continue
+                else:
+                    print(
+                        f"Adding {num_to_use} images for class '{class_name}' (per-class config)"
+                    )
+
             else:
                 num_to_use = len(files)
                 print(f"Adding all filtered images for class '{class_name}'")

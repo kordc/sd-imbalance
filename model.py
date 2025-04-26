@@ -26,7 +26,9 @@ class ResNet18Model(L.LightningModule):
         super().__init__()
         self.cfg = cfg
         # self.model = torchvision.models.resnet18(num_classes=10)
-        self.model = timm.create_model("resnet18", num_classes=10, pretrained=False)
+        self.model = timm.create_model(
+            "resnet18", num_classes=10, pretrained=self.cfg.pretrained
+        )
         self.conv1 = nn.Conv2d(
             3, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False
         )
@@ -523,28 +525,28 @@ class ResNet18Model(L.LightningModule):
             momentum=0.9,
             weight_decay=5e-4,
         )
-        
+
         # Linear warm-up for 5 epochs
         warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
-            optimizer, 
+            optimizer,
             start_factor=0.1,  # Start with lr * 0.1
-            end_factor=1.0,    # End with lr
-            total_iters=5      # 5 epochs
+            end_factor=1.0,  # End with lr
+            total_iters=5,  # 5 epochs
         )
-        
+
         # Cosine annealing for the remaining epochs
         cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
             T_max=self.cfg.epochs - 5,  # Remaining epochs after warm-up
         )
-        
+
         # Combine the schedulers
         scheduler = torch.optim.lr_scheduler.SequentialLR(
-            optimizer, 
+            optimizer,
             schedulers=[warmup_scheduler, cosine_scheduler],
-            milestones=[5]  # Switch from warmup to cosine at epoch 5
+            milestones=[5],  # Switch from warmup to cosine at epoch 5
         )
-        
+
         return [optimizer], [scheduler]
 
     def dynamic_upsample(self) -> None:

@@ -28,6 +28,7 @@ checkpoint_path:
 visualize_trained_model: True
 freeze_backbone: False
 fine_tune_on_real_data: False
+pretrained: False
 
 # Dataset settings
 augmentations:
@@ -52,13 +53,13 @@ test_augmentations:
 cutmix_or_mixup: False
 
 # Extra images settings
-add_extra_images: False
-extra_images_dir: /home/karol/sd-imbalance/flux_modified
+add_extra_images: True
+extra_images_dir: /home/karol/sd-imbalance/generated_data/cifar10_synaug_sdxl_class_specific
 downsample_classes:
   "airplane": 1
   "automobile": 1
   "bird": 1
-  "cat": 1.0
+  "cat": 0.01
   "deer": 1
   "dog": 1
   "frog": 1
@@ -69,7 +70,7 @@ extra_images_per_class:
   "airplane": 0
   "automobile": 0
   "bird": 0
-  "cat": 0
+  "cat": 4950
   "deer": 0
   "dog": 0
   "frog": 0
