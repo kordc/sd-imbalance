@@ -117,15 +117,15 @@ venv.bak/
 
 outputs/*
 data/*
-notebooks/data/*
-notebooks/outputs/*
-notebooks/.ipynb_checkpoints/*
+scripts/notebooks/data/*
+scripts/notebooks/outputs/*
+scripts/notebooks/.ipynb_checkpoints/*
 .ruff_cache/*
 .hydra/*
 *.png
 *.ckpt
 wandb/*
-notebooks/wandb*
+scripts/notebooks/wandb*
 *.jpg
 *.json
 *.jsonl
