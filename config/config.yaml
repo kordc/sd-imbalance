@@ -29,6 +29,7 @@ visualize_trained_model: True
 freeze_backbone: False
 fine_tune_on_real_data: False
 pretrained: False
+finetune_on_checkpoint: False
 
 # Dataset settings
 augmentations:

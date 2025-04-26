@@ -7,9 +7,12 @@ from omegaconf import DictConfig, OmegaConf
 import wandb
 from data import CIFAR10DataModule
 from model import ResNet18Model
-from utils import visualize_feature_maps, visualize_filters, CIFAR10_CLASSES
-
-import os
+from utils import (
+    visualize_feature_maps,
+    visualize_filters,
+    CIFAR10_CLASSES,
+    set_reproducibility,
+)
 
 
 @hydra.main(config_path="config", config_name="config", version_base="1.2")
@@ -31,20 +34,22 @@ def main(cfg: DictConfig) -> None:
     torch.set_float32_matmul_precision("medium")
 
     config_dict = OmegaConf.to_container(cfg, resolve=True)
-    wandb_logger = WandbLogger(project=cfg.project, log_model=True)
-    wandb.init(config=config_dict, project=cfg.project, name=cfg.name)
 
-    trainer = L.Trainer(
-        max_epochs=cfg.epochs,
-        accelerator="auto",
-        devices="auto",
-        logger=[wandb_logger],
-        log_every_n_steps=1,
-        check_val_every_n_epoch=1,
-    )
+    if not cfg.finetune_on_checkpoint:
+        wandb_logger = WandbLogger(project=cfg.project, log_model=True)
+        wandb.init(config=config_dict, project=cfg.project, name=cfg.name)
 
-    trainer.fit(model, datamodule=data_module)
-    trainer.test(model, datamodule=data_module)
+        trainer = L.Trainer(
+            max_epochs=cfg.epochs,
+            accelerator="auto",
+            devices="auto",
+            logger=[wandb_logger],
+            log_every_n_steps=1,
+            check_val_every_n_epoch=1,
+        )
+
+        trainer.fit(model, datamodule=data_module)
+        trainer.test(model, datamodule=data_module)
 
     if cfg.fine_tune_on_real_data:
         print(cfg)
@@ -84,7 +89,14 @@ def main(cfg: DictConfig) -> None:
             log_every_n_steps=1,
             check_val_every_n_epoch=1,
         )
-        model = ResNet18Model(cfg, class_weights=data_module.class_weights)
+        if not cfg.finetune_on_checkpoint:
+            model = ResNet18Model(cfg, class_weights=data_module.class_weights)
+        else:
+            model = ResNet18Model.load_from_checkpoint(
+                checkpoint_path=cfg.checkpoint_path,
+                cfg=cfg,
+                class_weights=data_module.class_weights,
+            )
         if cfg.freeze_backbone:
             model.freeze_backbone()
         if cfg.compile:
@@ -93,14 +105,11 @@ def main(cfg: DictConfig) -> None:
         fine_tune_trainer.test(model, datamodule=data_module)
 
     if cfg.get("visualize_trained_model", False):
-        # Generate visualizations
         feature_map_img, reseized_img = visualize_feature_maps(
             model, data_module, return_image=True
         )
         filter_img = visualize_filters(model, return_image=True)
-        # gradcam_img = apply_gradcam(model, data_module, return_image=True)
 
-        # Log images to wandb
         if feature_map_img is not None:
             wandb.log(
                 {"feature_maps": wandb.Image(feature_map_img, caption="Feature Maps")}
@@ -111,14 +120,6 @@ def main(cfg: DictConfig) -> None:
             )
         if filter_img is not None:
             wandb.log({"conv_filters": wandb.Image(filter_img, caption="Conv Filters")})
-
-
-def set_reproducibility(cfg):
-    L.seed_everything(cfg.seed, workers=True)
-    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-    torch.use_deterministic_algorithms(True)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
 
 
 if __name__ == "__main__":

@@ -7,6 +7,8 @@ import random
 import torchvision.transforms.functional as TF
 from PIL import Image
 import torch.nn.functional as F
+import os
+import lightning as L
 
 CIFAR10_CLASSES = {
     "airplane": 0,
@@ -21,6 +23,14 @@ CIFAR10_CLASSES = {
     "truck": 9,
 }
 CIFAR10_CLASSES_REVERSE = {v: k for k, v in CIFAR10_CLASSES.items()}
+
+
+def set_reproducibility(cfg):
+    L.seed_everything(cfg.seed, workers=True)
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 def evaluate_model(model, dataloader, device):
