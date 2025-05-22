@@ -37,7 +37,9 @@ We use `uv` for lightning-fast package management and virtual environment creati
     powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.5.26/install.ps1 | iex"
     uv sync
     ```
-    The `uv sync` command will create a virtual environment (`.venv`) and install all necessary packages.
+    > Note, that currently you may hit a bug with `uv` on Windows. If you do, please use WSL instead. You can install WSL by following the instructions [here](https://docs.microsoft.com/en-us/windows/wsl/install).
+
+The `uv sync` command will create a virtual environment (`.venv`) and install all necessary packages.
 
 ## 🐳 Running with Docker
 
