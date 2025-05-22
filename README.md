@@ -4,6 +4,7 @@ This repository is designed for experiments on how to use diffusion-generated sy
 
 ## Setup
 
+### uv
 Install all the required packages by running the following command:
 
 *Linux*
@@ -17,12 +18,16 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.5.26/install.p
 uv sync
 ```
 
+### WandB
 You should also configure your wandb account. Go to https://wandb.ai/authorize, and set it as a system variable:
 ```sh
 WANDB_API_KEY=$YOUR_API_KEY
 ```
 
 Note, that this is an obligatory step if you want to track experiments. Unless, you'll be still able to save logs but not to see any plots.
+
+### Ruff
+In order to push changes to the main branch please lint and format your code using `uvx ruff check`, and `uvx ruff format`. Fix errors if applicable.
 
 ## Usage
 - The project uses [Hydra](https://hydra.cc/) for configuration management, allowing you to easily override parameters from the config/config.yaml file via command-line arguments.
