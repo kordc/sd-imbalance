@@ -1,5 +1,6 @@
 * Ogarnij skrypty  ładnie
 * ogranij notebooki ładnie
+* dodaj testy
 * dodaj skrypty generowania danych do readme
 * poszperaj jakie opcje by pododawać
 * dodaj wsparcie pod nowe datssety
