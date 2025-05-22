@@ -12,6 +12,7 @@ All image generation scripts are designed so that their output is compatible wit
 4.  [`generate_cifar.py`](#4-generate_cifarpy)
 5.  [`generate_original_reference_from_openimages.py`](#5-generate-original-reference-from-openimagespy)
 6.  [`save_cifar_10.py`](#6-save_cifar_10py)
+7.  [`notebooks/`](#7-notebooks)
 
 ---
 
@@ -96,3 +97,9 @@ All image generation scripts are designed so that their output is compatible wit
 **Usage:** Running the script will download (if not already downloaded) and save the CIFAR-10 images to the specified directory.
 
 ---
+
+### 7. `notebooks`
+
+This directory contains:
+- [`analisys.ipynb`](notebooks/analysis.ipynb) notebook that provides an analisys on the differences between synthetic and real CIFAR10 data.
+- [`SDXL_Dreambooth_LoRA_advanced_example.ipynb`](notebooks/SDXL_Dreambooth_LoRA_advanced_example.ipynb) notebook that provides LoRA script for SDXL.
