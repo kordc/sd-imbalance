@@ -1,60 +1,83 @@
-# ImbalanceSD
+# ImbalanceSD: Your Toolkit for Training & Generating Data to Combat Imbalance 📊✨
 
-This repository is designed for experiments on how to use diffusion-generated synthetic data to address the problem of imbalanced datasets.
+Imbalanced datasets are a common headache in machine learning, often leading to models that perform poorly on minority classes. This repository offers a powerful experimental framework to tackle this challenge head-on!
 
-## Setup
+## 🚀 Quick Start
 
-### uv
-Install all the required packages by running the following command:
+Want to dive straight in? Here's how to get your environment ready and run a default training:
 
-*Linux*
+1.  **Install `uv`** (if you don't have it already):
+    *   Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+    *   Windows: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.5.26/install.ps1 | iex"`
+2.  **Sync Dependencies:**
+    ```sh
+    uv sync
+    ```
+3.  **Run a Training Experiment:**
+    ```sh
+    uv run train.py
+    ```
+    (Don't forget to configure your WandB account for experiment tracking! See [WandB Setup](#wandb-account-configuration) below).
+
+## 🛠️ Setup: Get Your Environment Ready!
+
+To get started with `ImbalanceSD`, follow these simple steps:
+
+### ⚡ Install `uv` & Dependencies
+
+We use `uv` for lightning-fast package management and virtual environment creation. It's awesome for reproducibility!
+
+*   **Linux:**
+    ```sh
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    uv sync
+    ```
+*   **Windows:**
+    ```sh
+    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.5.26/install.ps1 | iex"
+    uv sync
+    ```
+    The `uv sync` command will create a virtual environment (`.venv`) and install all necessary packages.
+
+### 🔑 WandB Account Configuration
+
+We highly recommend configuring your Weights & Biases (WandB) account to track, visualize, and compare your experiments with ease!
+
+1.  Go to [https://wandb.ai/authorize](https://wandb.ai/authorize) to get your API key.
+2.  Set it as a system environment variable:
+    ```sh
+    WANDB_API_KEY=$YOUR_API_KEY
+    ```
+    ⚠️ **Heads up!** This step is *obligatory* if you want to see interactive plots and track experiments in the cloud. You'll still get local logs, but the full WandB dashboard experience requires this.
+
+### 🧹 Code Linting & Formatting with Ruff
+
+To ensure consistent and clean code, we use `ruff`. Before pushing changes to the `main` branch, make sure your code adheres to the style guidelines:
+
 ```sh
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv sync
-```
-*Windows*
-```sh
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.5.26/install.ps1 | iex"
-uv sync
+uvx ruff check .
+uvx ruff format .
 ```
 
-### WandB
-You should also configure your wandb account. Go to https://wandb.ai/authorize, and set it as a system variable:
-```sh
-WANDB_API_KEY=$YOUR_API_KEY
-```
-
-Note, that this is an obligatory step if you want to track experiments. Unless, you'll be still able to save logs but not to see any plots.
-
-### Ruff
-In order to push changes to the main branch please lint and format your code using `uvx ruff check`, and `uvx ruff format`. Fix errors if applicable.
-
-## Usage
+## 🚀 Usage: Running Your Experiments
 - The project uses [Hydra](https://hydra.cc/) for configuration management, allowing you to easily override parameters from the config/config.yaml file via command-line arguments.
-- All scripts are meant to run inside a virtual environment. `uv sync` creates one, and to use it you can either use `uv run ...` instead of calling `python ...`, or casually enable venv on your device:
+- All scripts are designed to run within the virtual environment created by uv. We primarily use the uv run approach for simplicity.
 
-*Linux*
-```sh
-source .venv/bin/activate
-```
-*Windows*
-```sh
-.venv\Scripts\Activate.ps1
-```
+## 🖼️ Generating Data
+This repository includes scripts to generate synthetic data using diffusion models. Currently, our data generation efforts are tailored specifically for CIFAR10.
 
-This README focuses on `uv run` approach. For more information please follow [uv documentation](https://docs.astral.sh/uv/)
+To generate data, please use the provided scripts. Remember that a folder with generated samples should follow a consistent naming strategy: CLASSNAME_(...).jpg (e.g., airplane_0001.jpg, cat_500.jpg).
 
-## Generating data
-To generate data please use provided scripts. Note, that a folder with generated samples should have a consistent naming strategy - `CLASSNAME_(...).jpg`. For more information please refer to [README](scripts/README.md).
+For more detailed information on data generation scripts and their usage, please refer to the dedicated [README](scripts/README.md).
 
-## Training
-To train the model with the default configuration (defined in config/config.yaml), run:
+## 🏋️‍♀️ Training Your Model
+o kick off a training run with the default settings (as defined in [config/config.yaml](config/config.yaml)), simply execute:
 ```sh
 uv run train.py
 ```
 
 ### Overriding Configuration Parameters
-You can modify any parameter from `config/config.yaml` by passing `key=value` pairs on the command line. For nested parameters, use dot notation (e.g., `section.param=value`).
+One of the coolest features here is how easy it is to customize your experiments. You can modify any parameter from [config/config.yaml](config/config.yaml) by passing `key=value` pairs on the command line. For nested parameters, use dot notation (e.g., `section.param=value`).
 
 **Examples**:
 1. **Downsample multiple classes and add synthetic images:**
@@ -83,7 +106,7 @@ You can modify any parameter from `config/config.yaml` by passing `key=value` pa
     python train.py epochs=10 batch_size=128 name="my_short_run"
     ```
 
-## Configuration Options
+## ⚙️ Configuration Options: Customize Your Experiments!
 Here's an overview of key parameters you can configure:
 
 ### General Project Settings
@@ -140,3 +163,6 @@ These parameters control the addition and filtering of diffusion-generated image
 ### WandB Integration
 *   `name`: The name for the Weights & Biases run.
 *   `project`: The Weights & Biases project name.
+
+## 💖 Contributing
+We welcome contributions! If you have ideas for improvements, new features, or bug fixes, feel free to open an issue or submit a pull request.
