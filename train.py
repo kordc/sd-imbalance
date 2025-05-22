@@ -11,7 +11,6 @@ from model import ResNet18Model
 from utils import (
     visualize_feature_maps,
     visualize_filters,
-    CIFAR10_CLASSES,
     set_reproducibility,
     prepare_fine_tune,
 )
