@@ -10,9 +10,7 @@ import gc
 from typing import (
     List,
     Dict,
-    Any,
     Optional,
-    Union,
 )  # Added Union for interpolation_dict keys
 
 # This script generates synthetic images for all 10 CIFAR-10 classes

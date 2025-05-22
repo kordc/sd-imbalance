@@ -2,7 +2,7 @@
 
 import os
 import shutil
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Optional
 
 # This script downloads real-world images from the Open Images Dataset V6.
 # It maps CIFAR-10 class names to Open Images concepts and downloads a specified
