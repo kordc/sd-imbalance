@@ -7,11 +7,14 @@ import torch
 from diffusers import StableDiffusionXLPipeline
 from tqdm import tqdm
 import gc
+import argparse  # Import argparse
 from typing import (
     List,
     Dict,
     Optional,
 )
+from huggingface_hub import whoami  # For HF token management
+from pathlib import Path  # For HF token management
 
 """
 This script generates synthetic images for all 10 CIFAR-10 classes
@@ -21,6 +24,10 @@ general quality modifiers to create diverse and realistic images.
 Images are saved into class-specific subfolders, and filenames are compatible
 with data.py's image parsing.
 """
+
+# --- Fixed Data Structures (These are intrinsic to the script's prompting logic) ---
+# To modify these, you would edit the script directly or implement a file loading mechanism
+# for them, which is beyond the scope of simple CLI parameter exposure for *all* possible params.
 cifar10_classes: List[str] = [
     "airplane",
     "automobile",
@@ -35,6 +42,7 @@ cifar10_classes: List[str] = [
 ]
 
 class_specific_concepts: Dict[str, Dict[str, List[str]]] = {
+    # ... (content remains the same, omitted for brevity in this response) ...
     "airplane": {
         "descriptor_type": [
             "jet airplane",
@@ -1863,8 +1871,8 @@ class_specific_concepts: Dict[str, Dict[str, List[str]]] = {
 }
 
 
-# --- General Quality Modifiers ---
-# Expanded list for more variety
+# --- Default General Quality Modifiers ---
+# This list can be overridden or augmented via the --quality_modifiers_file CLI argument.
 quality_modifiers: List[str] = [
     "photorealistic",
     "high resolution",
@@ -1974,11 +1982,44 @@ quality_modifiers: List[str] = [
 ]
 
 
+def set_seeds(seed: int = 42) -> None:
+    """
+    Fix all possible seeds to ensure reproducibility across Python and PyTorch.
+
+    Args:
+        seed (int): The seed value to be set for all libraries.
+    """
+    random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+
 def make_cifar10_style_images(
-    base_folder: str = "./cifar10_synaug_sdxl_pdf_style_100k",
-    num_images_per_class: int = 100000,
-    classes: Optional[List[str]] = None,
-    concept_map: Optional[Dict[str, Dict[str, List[str]]]] = None,
+    base_folder: str,
+    num_images_per_class: int,
+    classes_to_generate: List[
+        str
+    ],  # Renamed to avoid conflict with 'classes' argument in main
+    concept_map: Dict[str, Dict[str, List[str]]],
+    quality_modifiers_list: List[
+        str
+    ],  # Renamed to avoid conflict with 'quality_modifiers' variable
+    model_id: str,
+    torch_dtype: torch.dtype,
+    variant: Optional[str],
+    use_safetensors: bool,
+    device: str,
+    guidance_scale: float,
+    num_inference_steps: int,
+    image_width: int,
+    image_height: int,
+    output_format: str,
+    hf_token: Optional[str] = None,
 ) -> None:
     """
     Generates images for specified CIFAR-10 classes using the Stable Diffusion XL Turbo pipeline.
@@ -1990,69 +2031,62 @@ def make_cifar10_style_images(
     Args:
         base_folder (str): The root directory where generated class folders will be created.
         num_images_per_class (int): The target number of images to generate for each class.
-        classes (Optional[List[str]]): A list of class names (strings) for which to generate images.
-                                       If None or empty, an error is printed.
-        concept_map (Optional[Dict[str, Dict[str, List[str]]]]): A dictionary mapping class names to
-                                                                   sub-dictionaries containing lists for
-                                                                   'descriptor_type' and 'context_action'.
-                                                                   If None or empty, an error is printed.
+        classes_to_generate (List[str]): A list of class names (strings) for which to generate images.
+        concept_map (Dict[str, Dict[str, List[str]]]): A dictionary mapping class names to
+                                                        sub-dictionaries containing lists for
+                                                        'descriptor_type' and 'context_action'.
+        quality_modifiers_list (List[str]): A list of general quality modifiers to be used in prompts.
+        model_id (str): Hugging Face model ID for the Stable Diffusion XL Turbo pipeline.
+        torch_dtype (torch.dtype): The torch data type to use for model weights.
+        variant (Optional[str]): Model variant to load (e.g., "fp16").
+        use_safetensors (bool): Whether to use safetensors for model loading.
+        device (str): The device to load the diffusion model onto (e.g., "cuda" or "cpu").
+        guidance_scale (float): Classifier-free guidance scale.
+        num_inference_steps (int): Number of inference steps.
+        image_width (int): Width of the generated images.
+        image_height (int): Height of the generated images.
+        output_format (str): Format to save the images (e.g., 'png', 'jpeg', 'webp').
+        hf_token (Optional[str]): Hugging Face authentication token.
     """
-    if classes is None or len(classes) == 0:
-        print("Error: A list of classes must be provided.")
+    if not classes_to_generate:
+        print("Error: No classes specified for generation. Exiting.")
         return
-    if concept_map is None or len(concept_map) == 0:
-        print("Error: A class-to-concept dictionary must be provided.")
+    if not concept_map:
+        print("Error: Empty class-to-concept dictionary provided. Exiting.")
+        return
+    if not quality_modifiers_list:
+        print("Error: The quality modifiers list is empty. Exiting.")
         return
 
     os.makedirs(base_folder, exist_ok=True)
     print(f"Base output directory: {base_folder}")
 
-    print("Loading SDXL-Turbo pipeline...")
+    print(
+        f"Loading SDXL-Turbo pipeline '{model_id}' on device '{device}' with dtype '{torch_dtype}'..."
+    )
     pipe: Optional[StableDiffusionXLPipeline] = None
     try:
         pipe = StableDiffusionXLPipeline.from_pretrained(
-            "stabilityai/sdxl-turbo",
-            torch_dtype=torch.float16,
-            variant="fp16",
-            use_safetensors=True,
+            model_id,
+            torch_dtype=torch_dtype,
+            variant=variant,
+            use_safetensors=use_safetensors,
+            token=hf_token,
         )
-        print("Pipeline loaded.")
+        pipe = pipe.to(device)  # Move to device immediately after loading
+        print("Pipeline loaded and moved to device.")
     except Exception as e:
-        print(f"Error loading pipeline: {e}")
+        print(f"Error loading or moving pipeline: {e}")
         print(
-            "Please ensure you have the necessary libraries installed, sufficient VRAM, and are logged in (`huggingface-cli login`)."
+            "Please ensure you have the necessary libraries installed, sufficient VRAM, "
+            "and are logged in (`huggingface-cli login`) or provided a token via --hf_token."
         )
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         gc.collect()
         return
 
-    if torch.cuda.is_available():
-        print("Moving pipeline to GPU...")
-        try:
-            pipe = pipe.to("cuda")
-            print("Pipeline moved to CUDA.")
-        except Exception as e:
-            print(f"Error moving pipeline to CUDA: {e}. Trying CPU.")
-            try:
-                pipe = pipe.to("cpu")
-                print("Running on CPU.")
-            except Exception as cpu_e:
-                print(f"Error moving pipeline to CPU: {cpu_e}. Exiting.")
-                del pipe
-                gc.collect()
-                return
-    else:
-        print("Warning: CUDA not available. Running on CPU will be very slow.")
-        try:
-            pipe = pipe.to("cpu")
-        except Exception as e:
-            print(f"Error moving pipeline to CPU: {e}. Exiting.")
-            del pipe
-            gc.collect()
-            return
-
-    for class_name in classes:
+    for class_name in classes_to_generate:
         class_folder = os.path.join(base_folder, class_name)
         os.makedirs(class_folder, exist_ok=True)
         print(f"\n--- Generating images for class: '{class_name}' ---")
@@ -2079,7 +2113,8 @@ def make_cifar10_style_images(
             continue
 
         print(
-            f"Found {len(descriptors)} descriptors and {len(contexts)} contexts for {class_name}."
+            f"Found {len(descriptors)} descriptors and {len(contexts)} contexts for {class_name}. "
+            f"Using {len(quality_modifiers_list)} quality modifiers."
         )
 
         generated_count = 0
@@ -2089,17 +2124,26 @@ def make_cifar10_style_images(
             try:
                 selected_descriptor: str = random.choice(descriptors)
                 selected_context: str = random.choice(contexts)
-                selected_quality: str = random.choice(quality_modifiers)
+                selected_quality: str = random.choice(quality_modifiers_list)
 
-                prompt: str = f"{selected_quality} photo of a {selected_descriptor} {class_name} {selected_context}"
+                # Ensure prompt doesn't have double spaces if components are empty
+                prompt_parts = [
+                    selected_quality,
+                    "photo of a",
+                    selected_descriptor,
+                    class_name,
+                    selected_context,
+                ]
+                # Filter out empty strings and join
+                prompt: str = " ".join(filter(None, prompt_parts))
 
                 with torch.inference_mode():
                     image_result = pipe(
                         prompt=prompt,
-                        guidance_scale=0.0,
-                        num_inference_steps=1,
-                        width=512,
-                        height=512,
+                        guidance_scale=guidance_scale,
+                        num_inference_steps=num_inference_steps,
+                        width=image_width,
+                        height=image_height,
                     )
                     if image_result and image_result.images:
                         image_to_save = image_result.images[0]
@@ -2107,25 +2151,38 @@ def make_cifar10_style_images(
                         tqdm.write(
                             f"\nWarning: Image generation failed for prompt: '{prompt}'. No image returned."
                         )
+                        # Don't increment generated_count, try again for this spot
                         continue
 
                 if image_to_save is None:
                     tqdm.write(
                         f"\nError: Image object is None after generation for prompt: '{prompt}'. Skipping."
                     )
+                    # Don't increment generated_count
                     continue
 
-                output_filename: str = f"{class_name}_{generated_count:06d}.png"
+                output_filename: str = (
+                    f"{class_name}_{generated_count:06d}.{output_format}"
+                )
                 output_path: str = os.path.join(class_folder, output_filename)
 
-                image_to_save.save(output_path)
+                # Save image
+                if output_format == "jpeg":
+                    image_to_save.save(
+                        output_path, quality=95
+                    )  # Default quality for JPEG
+                else:
+                    image_to_save.save(output_path)
+
                 generated_count += 1
                 pbar.update(1)
 
             except torch.cuda.OutOfMemoryError:
                 pbar.write(
-                    f"\nCUDA OutOfMemoryError for class '{class_name}', prompt: '{prompt}'. Skipping image, clearing cache."
+                    f"\nCUDA OutOfMemoryError for class '{class_name}', prompt: '{prompt}'. "
+                    "Skipping image, clearing cache and attempting to continue."
                 )
+                # Clear relevant variables and cache, then continue loop
                 if image_to_save is not None:
                     del image_to_save
                 if "image_result" in locals():
@@ -2135,14 +2192,15 @@ def make_cifar10_style_images(
                 gc.collect()
                 import time
 
-                time.sleep(1)
+                time.sleep(1)  # Small delay to allow memory to truly clear
                 continue
 
             except Exception as e:
                 pbar.write(
-                    f"\nError generating image {generated_count} for class '{class_name}' with prompt: '{prompt}'"
+                    f"\nError generating image {generated_count} for class '{class_name}' "
+                    f"with prompt: '{prompt}'. Error: {e}. Skipping this image."
                 )
-                pbar.write(f"Error details: {e}")
+                # Clear relevant variables and cache, then continue loop
                 if image_to_save is not None:
                     del image_to_save
                 if "image_result" in locals():
@@ -2152,19 +2210,15 @@ def make_cifar10_style_images(
                 gc.collect()
                 continue
             finally:
-                if image_to_save is not None:
-                    try:
-                        del image_to_save
-                    except NameError:
-                        pass
-                if "image_result" in locals():
-                    try:
-                        del image_result
-                    except NameError:
-                        pass
+                # Ensure objects are explicitly deleted to help GC, even if no exception occurred
+                if "image_to_save" in locals() and image_to_save is not None:
+                    del image_to_save
+                if "image_result" in locals() and image_result is not None:
+                    del image_result
 
         pbar.close()
         print(f"Finished generating {generated_count} images for class '{class_name}'.")
+        # Clear cache between classes to reduce VRAM fragmentation
         print("Clearing cache between classes...")
         gc.collect()
         if torch.cuda.is_available():
@@ -2178,7 +2232,7 @@ def make_cifar10_style_images(
     if pipe is not None:
         try:
             del pipe
-        except NameError:
+        except NameError:  # In case pipe was not initialized due to earlier error
             pass
     gc.collect()
     if torch.cuda.is_available():
@@ -2188,17 +2242,214 @@ def make_cifar10_style_images(
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Generate synthetic CIFAR-10 style images using SDXL-Turbo.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+
+    # General / Output arguments
+    parser.add_argument(
+        "--base_folder",
+        type=str,
+        default="./cifar10_synaug_sdxl_pdf_style_100k",
+        help="The root directory where generated class folders will be created.",
+    )
+    parser.add_argument(
+        "--num_images_per_class",
+        type=int,
+        default=100000,
+        help="The target number of images to generate for each class.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for reproducibility across Python and PyTorch.",
+    )
+    parser.add_argument(
+        "--output_format",
+        type=str,
+        default="png",
+        choices=["png", "jpeg", "webp"],
+        help="Output image format for generated images. For JPEG, quality is set to 95.",
+    )
+    parser.add_argument(
+        "--classes",
+        type=str,
+        default="all",
+        help="Comma-separated list of CIFAR-10 class names to generate (e.g., 'airplane,cat,dog'). "
+        "Use 'all' to generate for all 10 predefined classes.",
+    )
+    parser.add_argument(
+        "--quality_modifiers_file",
+        type=str,
+        default=None,
+        help="Path to a text file containing quality modifiers (one per line). "
+        "If not provided, a default internal list will be used.",
+    )
+
+    # Diffusion Pipeline / Model arguments
+    parser.add_argument(
+        "--model_id",
+        type=str,
+        default="stabilityai/sdxl-turbo",
+        help="Hugging Face model ID for the Stable Diffusion XL Turbo pipeline.",
+    )
+    parser.add_argument(
+        "--torch_dtype",
+        type=str,
+        default="float16",
+        choices=["float16", "bfloat16", "float32"],
+        help="The torch data type to use for model weights.",
+    )
+    parser.add_argument(
+        "--variant",
+        type=str,
+        default="fp16",  # Default for SDXL-Turbo
+        help="Model variant to load (e.g., 'fp16'). Set to 'None' to disable variant loading. (String 'None' will be converted to actual None).",
+    )
+    parser.add_argument(
+        "--use_safetensors",
+        action="store_true",  # Default behavior for SDXL-Turbo is to use safetensors
+        help="Whether to use safetensors for model loading (default behavior for SDXL-Turbo).",
+    )
+    parser.add_argument(
+        "--no_safetensors",
+        action="store_false",
+        dest="use_safetensors",  # This makes --no_safetensors set use_safetensors to False
+        help="Explicitly disable using safetensors for model loading.",
+    )
+    parser.set_defaults(
+        use_safetensors=True
+    )  # Set the true default for use_safetensors
+
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda" if torch.cuda.is_available() else "cpu",
+        help="The device to load the diffusion model onto (e.g., 'cuda' or 'cpu').",
+    )
+    parser.add_argument(
+        "--guidance_scale",
+        type=float,
+        default=0.0,
+        help="Classifier-free guidance scale. SDXL-Turbo typically uses 0.0.",
+    )
+    parser.add_argument(
+        "--num_inference_steps",
+        type=int,
+        default=1,
+        help="Number of inference steps. SDXL-Turbo typically uses 1.",
+    )
+    parser.add_argument(
+        "--image_width",
+        type=int,
+        default=512,
+        help="Width of the generated images.",
+    )
+    parser.add_argument(
+        "--image_height",
+        type=int,
+        default=512,
+        help="Height of the generated images.",
+    )
+    # Hugging Face authentication token
+    parser.add_argument(
+        "--hf_token",
+        type=str,
+        default=None,
+        help="Hugging Face authentication token. Overrides HF_TOKEN environment variable. Required for private models.",
+    )
+
+    args = parser.parse_args()
+
+    # Set seeds at the very beginning based on CLI arg for full reproducibility
+    set_seeds(args.seed)
+
+    # Convert torch_dtype string to actual torch.dtype
+    if args.torch_dtype == "float16":
+        torch_dtype_val = torch.float16
+    elif args.torch_dtype == "bfloat16":
+        torch_dtype_val = torch.bfloat16
+    elif args.torch_dtype == "float32":
+        torch_dtype_val = torch.float32
+    else:  # This should not be reached due to 'choices' in argparse
+        raise ValueError(f"Unknown torch_dtype: {args.torch_dtype}")
+
+    # Convert variant string "None" to actual None
+    variant_val = args.variant if args.variant.lower() != "none" else None
+
+    # Determine classes to generate for
+    classes_to_process: List[str] = []
+    if args.classes.lower() == "all":
+        classes_to_process = cifar10_classes
+    else:
+        # Validate requested classes against known CIFAR-10 classes
+        requested_classes = [c.strip() for c in args.classes.split(",")]
+        for cls in requested_classes:
+            if cls not in cifar10_classes:
+                print(f"Warning: '{cls}' is not a valid CIFAR-10 class. Skipping it.")
+            else:
+                classes_to_process.append(cls)
+        if not classes_to_process:
+            print("Error: No valid classes specified. Exiting.")
+            exit(1)
+
+    # Load quality modifiers from file if provided, otherwise use default
+    current_quality_modifiers: List[str] = []
+    if args.quality_modifiers_file:
+        try:
+            with open(args.quality_modifiers_file, "r") as f:
+                current_quality_modifiers = [line.strip() for line in f if line.strip()]
+            print(
+                f"Loaded {len(current_quality_modifiers)} quality modifiers from {args.quality_modifiers_file}."
+            )
+            if not current_quality_modifiers:
+                print(
+                    "Warning: The provided quality modifiers file is empty. Falling back to default internal modifiers."
+                )
+                current_quality_modifiers = quality_modifiers
+        except FileNotFoundError:
+            print(
+                f"Error: Quality modifiers file not found at {args.quality_modifiers_file}. Falling back to default internal modifiers."
+            )
+            current_quality_modifiers = quality_modifiers
+        except Exception as e:
+            print(
+                f"Error reading quality modifiers file {args.quality_modifiers_file}: {e}. Falling back to default internal modifiers."
+            )
+            current_quality_modifiers = quality_modifiers
+    else:
+        current_quality_modifiers = quality_modifiers  # Use the internal default list
+
+    # Initial CUDA cache clear (good practice)
     if torch.cuda.is_available():
         print("Initial CUDA cache clear...")
         torch.cuda.empty_cache()
         gc.collect()
+        torch.cuda.synchronize()
         print("Cache cleared.")
 
+    # Pass token to make_cifar10_style_images function. Prioritize CLI arg, then env var.
+    hf_token_to_use = args.hf_token or os.getenv("HF_TOKEN")
+
     make_cifar10_style_images(
-        base_folder="./cifar10_sdxl_turbo_1_per_class",
-        num_images_per_class=1,
-        classes=cifar10_classes,
-        concept_map=class_specific_concepts,
+        base_folder=args.base_folder,
+        num_images_per_class=args.num_images_per_class,
+        classes_to_generate=classes_to_process,
+        concept_map=class_specific_concepts,  # Using the internal fixed dict
+        quality_modifiers_list=current_quality_modifiers,
+        model_id=args.model_id,
+        torch_dtype=torch_dtype_val,
+        variant=variant_val,
+        use_safetensors=args.use_safetensors,
+        device=args.device,
+        guidance_scale=args.guidance_scale,
+        num_inference_steps=args.num_inference_steps,
+        image_width=args.image_width,
+        image_height=args.image_height,
+        output_format=args.output_format,
+        hf_token=hf_token_to_use,
     )
 
     print("\nScript finished.")
