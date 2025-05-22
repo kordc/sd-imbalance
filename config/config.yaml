@@ -60,7 +60,7 @@ downsample_classes:
   "airplane": 1
   "automobile": 1
   "bird": 1
-  "cat": 0.01
+  "cat": 1
   "deer": 1
   "dog": 1
   "frog": 1
