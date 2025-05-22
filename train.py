@@ -76,6 +76,10 @@ def main(cfg: DictConfig) -> None:
         trainer.test(model, datamodule=data_module)
 
     # Fine-tuning on real data
+    if cfg.finetune_on_checkpoint and not cfg.fine_tune_on_real_data:
+        print(
+            "To enable finetune_on_checkpoint, you must also enable fine_tune_on_real_data"
+        )
     if cfg.fine_tune_on_real_data:
         print(cfg)
         wandb_logger2 = WandbLogger(project=cfg.project, log_model=True)
@@ -101,6 +105,9 @@ def main(cfg: DictConfig) -> None:
         if not cfg.finetune_on_checkpoint:
             model = ResNet18Model(cfg, class_weights=data_module.class_weights)
         else:
+            if not cfg.checkpoint_path:
+                print("\n\nYou must provide a checkpoint path!\n\n")
+                return
             model = ResNet18Model.load_from_checkpoint(
                 checkpoint_path=cfg.checkpoint_path,
                 cfg=cfg,

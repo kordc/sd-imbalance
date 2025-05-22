@@ -19,7 +19,7 @@ from torchvision.transforms import v2
 import timm
 from typing import Any, Dict, List, Tuple, Optional
 
-from utils import CIFAR10_CLASSES_REVERSE
+from utils import CIFAR10_CLASSES_REVERSE, CIFAR10_CLASSES
 
 
 class ResNet18Model(L.LightningModule):
@@ -211,10 +211,12 @@ class ResNet18Model(L.LightningModule):
         """
         inputs, labels = batch
         if self.cfg.get("cutmix_or_mixup", False):
-            inputs, labels = self.cutmix_or_mixup(
-                inputs,
-                labels,
-            )
+            # cutmix_or_mixup currently hits a PyTorch bug, don't use it!
+            exit(-1)
+            # inputs, labels = self.cutmix_or_mixup(
+            #     inputs,
+            #     labels,
+            # )
         outputs = self(inputs)
         loss = self.criterion(outputs, labels)
 
@@ -690,7 +692,7 @@ class ResNet18Model(L.LightningModule):
 
         Assumes candidate images are stored in self.cfg.extra_images_dir.
         The new images are added with the label corresponding to the minority
-        class (self.cfg.downsample_class).
+        class (determined from config downsample_classes).
         """
         import numpy as np
         from PIL import Image
@@ -748,16 +750,16 @@ class ResNet18Model(L.LightningModule):
 
         selected_images = [candidate_images[i] for i in top_indices]
 
-        # Determine the target label for these dynamic examples.
         target_label: int
-        if isinstance(self.cfg.downsample_class, str):
-            from utils import (
-                CIFAR10_CLASSES,
-            )  # assuming this conversion exists in your utils
-
-            target_label = CIFAR10_CLASSES[self.cfg.downsample_class]
+        if self.cfg.get("dynamic_upsample_target_class"):
+            target_label = CIFAR10_CLASSES[
+                self.cfg.get("dynamic_upsample_target_class")
+            ]
         else:
-            target_label = self.cfg.downsample_class
+            self.print(
+                "Warning: No specific target class for dynamic upsampling found in config"
+            )
+            exit()
 
         try:
             # Accessing the underlying dataset which might be a Subset if random_split was used

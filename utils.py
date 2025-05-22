@@ -213,10 +213,8 @@ def prepare_fine_tune(cfg: DictConfig) -> None:
     torch.use_deterministic_algorithms(True)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    cfg.downsample_class = None
     cfg.naive_oversample = False
     cfg.naive_undersample = False
-    cfg.keep_only_cat = False
     cfg.smote = False
     cfg.adasyn = False
     cfg.label_smoothing = False

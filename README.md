@@ -60,9 +60,9 @@ You can modify any parameter from `config/config.yaml` by passing `key=value` pa
     similarity_filter="original" \
     similarity_threshold=0.8
     ```
-2. **Enable SMOTE for oversampling and CutMix/MixUp augmentations:**
+2. **Enable SMOTE for oversampling:**
     ```py
-    python train.py smote=True cutmix_or_mixup=True
+    python train.py smote=True
     ```
 3. Train for fewer epochs with a larger batch size and a specific WandB run name:
     ```py
@@ -100,7 +100,6 @@ Here's an overview of key parameters you can configure:
 ### Dataset Settings
 *   `augmentations`: List of augmentations to apply during training (e.g., `ToTensor`, `RandomCrop`, `RandomHorizontalFlip`, `Resize`).
 *   `test_augmentations`: List of augmentations for testing (e.g., `ToTensor`, `Resize`).
-*   `cutmix_or_mixup`: If `True`, randomly applies CutMix or MixUp augmentations during training.
 
 ### Synthetic Data Integration
 These parameters control the addition and filtering of diffusion-generated images. Note, that currently this repository works only with CIFAR10 data.
@@ -122,6 +121,7 @@ These parameters control the addition and filtering of diffusion-generated image
 ### Dynamic Upsampling (Active Learning)
 *   `dynamic_upsample`: If `True`, enables dynamic upsampling based on model uncertainty at the end of each training epoch.
 *   `num_dynamic_upsample`: Number of new images to add from the candidate pool during each dynamic upsampling step.
+*   `dynamic_upsample_target_class`: Targeted class for dynamic upsampling.
 
 ### WandB Integration
 *   `name`: The name for the Weights & Biases run.
