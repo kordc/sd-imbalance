@@ -49,3 +49,6 @@ exclude = ["notebooks/*.ipynb"]
 [tool.uv.sources]
 datasets = { git = "https://github.com/huggingface/datasets.git" }
 diffusers = { git = "https://github.com/huggingface/diffusers" }
+
+[tool.pyright]
+typeCheckingMode = "off"

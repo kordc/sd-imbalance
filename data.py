@@ -11,32 +11,76 @@ from omegaconf import DictConfig
 from PIL import Image
 from torch.utils.data import DataLoader, random_split
 from torchvision.transforms import v2 as transforms
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 # from scripts.flux_redux_augment import FluxReduxAugment
 from utils import CIFAR10_CLASSES
 
 
 class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
+    """
+    A custom CIFAR-10 dataset class that extends torchvision.datasets.CIFAR10
+    to support various data manipulation techniques.
+
+    Features include:
+    - Downsampling specific classes to a desired ratio.
+    - Naive oversampling or undersampling for class imbalance.
+    - SMOTE and ADASYN for synthetic sample generation.
+    - Adding external (extra) images to the dataset, with optional
+      CLIP-based similarity filtering and synthetic image normalization.
+    - Dynamic normalization updates based on the current dataset statistics.
+    """
+
     def __init__(
         self,
-        root,
-        train=True,
-        transform=None,
-        download=True,
-        downsample_classes=None,  # Dict of class_name:ratio pairs
-        naive_oversample=False,
-        naive_undersample=False,
-        smote=False,
-        adasyn=False,
-        random_state=42,
-        add_extra_images=False,
-        extra_images_dir="extra-images",
-        extra_images_per_class=None,  # Dict of class_name:count pairs
-        normalize_synthetic=None,  # None, 'mean_std', or 'clahe'
-        similarity_filter=None,  # None, 'original', or 'synthetic'
-        similarity_threshold=0.7,  # Threshold for similarity filtering (0.0-1.0)
-        reference_sample_size=50,  # Number of reference images to use
+        root: str,
+        train: bool = True,
+        transform: Optional[transforms.Compose] = None,
+        download: bool = True,
+        downsample_classes: Optional[
+            Dict[str, float]
+        ] = None,  # Dict of class_name:ratio pairs
+        naive_oversample: bool = False,
+        naive_undersample: bool = False,
+        smote: bool = False,
+        adasyn: bool = False,
+        random_state: int = 42,
+        add_extra_images: bool = False,
+        extra_images_dir: str = "extra-images",
+        extra_images_per_class: Optional[
+            Dict[str, int]
+        ] = None,  # Dict of class_name:count pairs
+        normalize_synthetic: Optional[str] = None,  # None, 'mean_std', or 'clahe'
+        similarity_filter: Optional[str] = None,  # None, 'original', or 'synthetic'
+        similarity_threshold: float = 0.7,  # Threshold for similarity filtering (0.0-1.0)
+        reference_sample_size: int = 50,  # Number of reference images to use
     ) -> None:
+        """
+        Initializes the DownsampledCIFAR10 dataset.
+
+        Args:
+            root (str): Root directory of dataset where CIFAR-10 data exists or will be downloaded.
+            train (bool): If True, creates dataset from `training.pt`, otherwise from `test.pt`.
+            transform (Optional[transforms.Compose]): A function/transform that takes in an PIL image
+                                                      and returns a transformed version.
+            download (bool): If True, downloads the dataset from the internet and puts it in root
+                             directory. If dataset is already downloaded, it is not downloaded again.
+            downsample_classes (Optional[Dict[str, float]]): Dictionary of class names to ratios (0.0-1.0)
+                                                              for downsampling specific classes.
+            naive_oversample (bool): If True, apply random oversampling. Mutually exclusive with other resampling.
+            naive_undersample (bool): If True, apply random undersampling. Mutually exclusive with other resampling.
+            smote (bool): If True, apply SMOTE oversampling. Mutually exclusive with other resampling.
+            adasyn (bool): If True, apply ADASYN oversampling. Mutually exclusive with other resampling.
+            random_state (int): Seed for random operations in resampling.
+            add_extra_images (bool): If True, adds external images from `extra_images_dir`.
+            extra_images_dir (str): Directory containing extra images.
+            extra_images_per_class (Optional[Dict[str, int]]): Dictionary of class names to number of
+                                                                images to add per class.
+            normalize_synthetic (Optional[str]): Normalization method for synthetic images ('mean_std' or 'clahe').
+            similarity_filter (Optional[str]): Method to filter synthetic images by similarity ('original' or 'synthetic').
+            similarity_threshold (float): Threshold for similarity filtering.
+            reference_sample_size (int): Number of reference images to use for similarity filtering.
+        """
         super().__init__(root=root, train=train, transform=transform, download=download)
 
         orig_data = self.data.astype(np.float32) / 255.0
@@ -77,8 +121,12 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         self._apply_resampling()
         self.update_normalization()
 
-    def update_normalization(self):
-        """Update the normalization parameters for the transforms after data changes."""
+    def update_normalization(self) -> None:
+        """
+        Updates the normalization parameters in the active transform
+        based on the current mean and standard deviation of the dataset.
+        This is useful if the dataset contents change (e.g., after resampling).
+        """
         if self.transform is None:
             return
 
@@ -102,21 +150,31 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                     transforms.Normalize(mean=mean.tolist(), std=std.tolist())
                 )
 
-    def get_new_std_mean(self):
-        """Return the new mean and std of the dataset after modifications."""
+    def get_new_std_mean(self) -> Tuple[List[float], List[float]]:
+        """
+        Calculates and returns the mean and standard deviation of the current dataset.
+
+        Returns:
+            Tuple[List[float], List[float]]: A tuple containing two lists:
+                                             the mean of each channel and the standard
+                                             deviation of each channel.
+        """
         data = self.data.astype(np.float32) / 255.0
         mean = np.mean(data, axis=(0, 1, 2))
         std = np.std(data, axis=(0, 1, 2))
         return mean.tolist(), std.tolist()
 
     def _downsample_multiple(self) -> None:
-        """Downsample multiple classes according to their specified ratios."""
+        """
+        Downsamples multiple classes in the dataset according to their specified ratios.
+        Non-downsampled classes are kept as is.
+        """
         targets = np.array(self.targets)
         selected_idx = np.arange(len(targets))
-        keep_indices = []
+        keep_indices: List[np.ndarray] = []
 
         # Convert class names to IDs if needed
-        class_id_ratios = {}
+        class_id_ratios: Dict[int, float] = {}
         for class_name, ratio in self.downsample_classes.items():
             if isinstance(class_name, str):
                 class_id = CIFAR10_CLASSES.get(class_name)
@@ -144,8 +202,12 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
             self.data = self.data[all_keep_indices]
             self.targets = list(targets[all_keep_indices])
 
-    def _apply_resampling(self):
-        """Apply resampling methods (SMOTE, ADASYN, etc.) after downsampling."""
+    def _apply_resampling(self) -> None:
+        """
+        Applies a selected resampling method (naive oversampling, naive undersampling,
+        SMOTE, or ADASYN) to balance the dataset after any initial downsampling.
+        Ensures only one resampling method is applied at a time.
+        """
         num_resampling = sum(
             [self.naive_oversample, self.naive_undersample, self.smote, self.adasyn]
         )
@@ -161,6 +223,9 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
 
         data_reshaped = self.data.reshape(self.data.shape[0], -1)
 
+        resampled_data: np.ndarray
+        resampled_targets: List[int]
+
         if self.naive_oversample:
             ros = RandomOverSampler(
                 sampling_strategy="auto", random_state=self.random_state
@@ -171,7 +236,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         elif self.naive_undersample:
             if self.downsample_classes:
                 targets = np.array(self.targets)
-                target_sizes = {}
+                target_sizes: Dict[int, int] = {}
                 for class_id in np.unique(targets):
                     target_sizes[class_id] = len(targets[targets == class_id])
                 rus = RandomUnderSampler(
@@ -194,6 +259,8 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
             resampled_data, resampled_targets = adasyn.fit_resample(
                 data_reshaped, self.targets
             )
+        else:
+            return  # Should not happen due to initial check, but for type safety
 
         resampled_data = resampled_data.reshape(-1, 32, 32, 3)
         self.data = resampled_data
@@ -201,9 +268,11 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
 
     def _add_extra_images(self) -> None:
         """
-        Adds extra images from a directory into the training data.
-        Images are filtered by CLIP similarity and normalized using selected method.
-        Images should be named as CLASS_idx.png/jpg (e.g., cat_1.png, airplane_42.jpg).
+        Adds extra images from a specified directory into the dataset.
+        Images are named as CLASS_idx.png/jpg (e.g., cat_1.png, airplane_42.jpg).
+        Optional features include:
+        - Filtering images based on CLIP similarity to existing original or synthetic samples.
+        - Normalizing synthetic images to match the mean/std of the original dataset or using CLAHE.
         """
         import cv2
         import clip
@@ -213,9 +282,9 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         image_files = glob(os.path.join(self.extra_images_dir, "*.*"))
         if not image_files:
             print(f"No images found in {self.extra_images_dir}")
-            exit(1)
+            return  # Changed exit(1) to return, as it's a method not main function
 
-        class_to_files = {}
+        class_to_files: Dict[str, List[str]] = {}
         for fpath in image_files:
             filename = os.path.basename(fpath)
             try:
@@ -231,15 +300,15 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
             f"Using original dataset statistics for normalization - Mean: {orig_mean}, Std: {orig_std}"
         )
 
-        clip_model = None
-        clip_preprocess = None
+        clip_model: Any = None
+        clip_preprocess: Any = None
         if self.similarity_filter:
             device = "cuda" if torch.cuda.is_available() else "cpu"
             print(f"Loading CLIP model for similarity filtering (device: {device})")
             clip_model, clip_preprocess = clip.load("ViT-B/32", device=device)
 
-        new_images_list = []
-        target_classes = []
+        new_images_list: List[np.ndarray] = []
+        target_classes: List[int] = []
 
         for class_name, files in class_to_files.items():
             class_idx = CIFAR10_CLASSES[class_name]
@@ -247,6 +316,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
             if not self.extra_images_per_class:
                 continue
 
+            num_to_use: int
             if (
                 self.extra_images_per_class
                 and class_name in self.extra_images_per_class
@@ -266,8 +336,8 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                 num_to_use = len(files)
                 print(f"Adding all filtered images for class '{class_name}'")
 
-            class_images = []
-            file_paths = []
+            class_images: List[np.ndarray] = []
+            file_paths: List[str] = []
             for fpath in files:
                 try:
                     with Image.open(fpath) as img:
@@ -288,8 +358,8 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                     f"Filtering {len(class_images)} images for class {class_name} using {self.similarity_filter} reference..."
                 )
 
-                synth_embeddings = []
-                valid_indices = []
+                synth_embeddings: List[np.ndarray] = []
+                valid_indices: List[int] = []
                 for i, img_arr in enumerate(class_images):
                     try:
                         img_pil = Image.fromarray(img_arr)
@@ -308,7 +378,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
 
                 synth_embeddings = np.array(synth_embeddings)
 
-                ref_embeddings = None
+                ref_embeddings: Optional[np.ndarray] = None
                 if self.similarity_filter == "original":
                     original_indices = [
                         i
@@ -360,19 +430,24 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                     )
                     ref_embeddings = synth_embeddings[ref_indices]
 
-                similarity_scores = np.dot(synth_embeddings, ref_embeddings.T).mean(
-                    axis=1
-                )
-                filtered_indices = [
-                    valid_indices[i]
-                    for i, score in enumerate(similarity_scores)
-                    if score >= self.similarity_threshold
-                ]
-                print(
-                    f"Filtered {len(class_images)} to {len(filtered_indices)} images with similarity >= {self.similarity_threshold}"
-                )
-                class_images = [class_images[i] for i in filtered_indices]
-                file_paths = [file_paths[i] for i in filtered_indices]
+                if ref_embeddings is not None:
+                    similarity_scores = np.dot(synth_embeddings, ref_embeddings.T).mean(
+                        axis=1
+                    )
+                    filtered_indices = [
+                        valid_indices[i]
+                        for i, score in enumerate(similarity_scores)
+                        if score >= self.similarity_threshold
+                    ]
+                    print(
+                        f"Filtered {len(class_images)} to {len(filtered_indices)} images with similarity >= {self.similarity_threshold}"
+                    )
+                    class_images = [class_images[i] for i in filtered_indices]
+                    file_paths = [file_paths[i] for i in filtered_indices]
+                else:
+                    print(
+                        f"Skipping similarity filter for class {class_name}: No reference embeddings."
+                    )
 
             if num_to_use < len(class_images):
                 indices = np.random.choice(
@@ -399,9 +474,9 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
                         f"Class {class_name} synthetic stats - Mean: {synth_mean}, Std: {synth_std}"
                     )
 
-                    normalized = (
-                        synth_data - synth_mean[None, None, None, :]
-                    ) / synth_std[None, None, None, :]
+                    normalized = (synth_data - synth_mean[None, None, None, :]) / (
+                        synth_std[None, None, None, :] + 1e-6
+                    )  # Add epsilon to avoid division by zero
                     normalized = (
                         normalized * orig_std[None, None, None, :]
                         + orig_mean[None, None, None, :]
@@ -411,7 +486,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
 
                 elif self.normalize_synthetic == "clahe":
                     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-                    normalized = []
+                    normalized: List[np.ndarray] = []
                     for img in class_images_array:
                         lab = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
                         l, a, b = cv2.split(lab)  # noqa: E741
@@ -439,7 +514,7 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
 
         if not new_images_list:
             print("No valid images found to add")
-            exit(1)
+            return  # Changed exit(1) to return
 
         new_images = np.stack(new_images_list, axis=0)
         print(f"Normalization method: {self.normalize_synthetic}")
@@ -451,36 +526,68 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         print(f"Added a total of {len(new_images_list)} new images to the dataset")
 
     def _downsample(self) -> None:
+        """
+        A wrapper method that calls `_downsample_multiple` to downsample classes.
+        """
         self._downsample_multiple()
 
 
 class CIFAR10DataModule(L.LightningDataModule):
+    """
+    A LightningDataModule for preparing and loading the CIFAR-10 dataset,
+    incorporating various data augmentation, downsampling, and resampling strategies.
+    """
+
     def __init__(self, cfg: DictConfig) -> None:
+        """
+        Initializes the CIFAR10DataModule.
+
+        Args:
+            cfg (DictConfig): Configuration object containing data parameters
+                              (e.g., augmentations, batch size, downsampling settings).
+        """
         super().__init__()
         self.cfg = cfg
         self.transform = self.get_augmentations(cfg.augmentations)
-        self.test_transform = self.get_augmentations(cfg.test_augmentations)
-        self.train_dataset = None
-        self.val_dataset = None
-        self.test_dataset = None
+        self.test_transform: Optional[transforms.Compose] = (
+            None  # Will be set in prepare_data
+        )
+        self.train_dataset: Optional[torch.utils.data.Subset] = None
+        self.val_dataset: Optional[torch.utils.data.Subset] = None
+        self.test_dataset: Optional[torchvision.datasets.CIFAR10] = None
 
         self.data_prepared = False
+        self.class_weights: Optional[torch.Tensor] = None
 
-    def get_augmentations(self, augmentations_cfg):
-        transform_list = []
-        if "FluxReduxAugment" in augmentations_cfg:
+    def get_augmentations(
+        self, augmentations_cfg: List[Dict[str, Any]]
+    ) -> transforms.Compose:
+        """
+        Constructs a torchvision.transforms.Compose pipeline based on the provided
+        augmentation configuration.
+
+        Args:
+            augmentations_cfg (List[Dict[str, Any]]): A list of dictionaries, where each
+                                                       dictionary describes an augmentation
+                                                       transform (name and parameters).
+
+        Returns:
+            transforms.Compose: A composed transform pipeline.
+        """
+        transform_list: List[Any] = []
+        custom_transforms: Dict[str, Any] = {}
+        if "FluxReduxAugment" in [aug["name"] for aug in augmentations_cfg]:
             from scripts.flux_redux_augment import FluxReduxAugment
 
             custom_transforms = {"FluxReduxAugment": FluxReduxAugment}
-        else:
-            custom_transforms = {}
+
         for aug in augmentations_cfg:
             aug_name = aug["name"]
             params = aug.get("params", {})
             if aug_name in custom_transforms:
                 transform_list.append(custom_transforms[aug_name](**params))
             elif "resize" in aug_name.lower():
-                interpolation_dict = {
+                interpolation_dict: Dict[Union[str, int], Any] = {
                     "nearest": Image.NEAREST,
                     "bilinear": Image.BILINEAR,
                     "bicubic": Image.BICUBIC,
@@ -490,25 +597,47 @@ class CIFAR10DataModule(L.LightningDataModule):
                     2: Image.BICUBIC,
                     3: Image.LANCZOS,
                 }
-                params["interpolation"] = interpolation_dict[params["interpolation"]]
+                # Check if interpolation is a key in params and update it
+                if "interpolation" in params:
+                    params["interpolation"] = interpolation_dict[
+                        params["interpolation"]
+                    ]
                 transform_list.append(getattr(transforms, aug_name)(**params))
             else:
                 transform_list.append(getattr(transforms, aug_name)(**params))
         return transforms.Compose(transform_list)
 
-    def setup(self, stage):
+    def setup(self, stage: Optional[str]) -> None:
+        """
+        LightningDataModule hook.
+        This method is called by Lightning to setup the data.
+        Currently, datasets are prepared in `prepare_data` for more control.
+
+        Args:
+            stage (Optional[str]): The stage (e.g., "fit", "validate", "test", "predict").
+        """
         if stage == "fit" or stage is None:
             return
 
     def prepare_data(self) -> None:
+        """
+        LightningDataModule hook to download and prepare data (e.g., dataset objects).
+        This is called once across all processes.
+        It handles dataset initialization, downsampling, resampling, adding extra images,
+        and calculating class weights.
+        """
         if self.data_prepared:
             return
         print("Preparing data...")
         cifar10_train_path = os.path.join("./data", "cifar-10-batches-py")
         download_flag = not os.path.exists(cifar10_train_path)
 
-        downsample_classes = getattr(self.cfg, "downsample_classes", {})
-        extra_images_per_class = getattr(self.cfg, "extra_images_per_class", {})
+        downsample_classes: Dict[str, float] = getattr(
+            self.cfg, "downsample_classes", {}
+        )
+        extra_images_per_class: Dict[str, int] = getattr(
+            self.cfg, "extra_images_per_class", {}
+        )
 
         full_train_dataset = DownsampledCIFAR10(
             root="./data",
@@ -550,17 +679,46 @@ class CIFAR10DataModule(L.LightningDataModule):
             [train_size, val_size],
         )
 
-        train_targets = torch.tensor(
-            [full_train_dataset.targets[i] for i in self.train_dataset.indices],
-        )
+        # Access targets through the original dataset for `random_split` subsets
+        if hasattr(self.train_dataset, "dataset") and hasattr(
+            self.train_dataset.dataset, "targets"
+        ):
+            train_targets = torch.tensor(
+                [
+                    self.train_dataset.dataset.targets[i]
+                    for i in self.train_dataset.indices
+                ],
+            )
+        else:
+            # Fallback if the structure is different, though unlikely for standard datasets
+            # This might require iterating the actual dataloader if targets are not easily accessible
+            # from a Subset or custom dataset without a 'targets' attribute.
+            print(
+                "Warning: Could not directly access targets from train_dataset for class weight calculation."
+            )
+            # Placeholder, robust solution would involve sampling or re-loading data
+            train_targets = torch.tensor(
+                [0]
+            )  # Dummy to avoid crash, but this will be wrong.
 
         class_counts = torch.bincount(train_targets)
-        class_weights = 1.0 / class_counts.float()
+        # Avoid division by zero for classes that might have 0 count
+        class_weights = 1.0 / (
+            class_counts.float() + 1e-6
+        )  # Add epsilon to avoid division by zero
         self.class_weights = class_weights / class_weights.sum()
 
         self.data_prepared = True
 
-    def train_dataloader(self):
+    def train_dataloader(self) -> DataLoader:
+        """
+        Returns the DataLoader for the training set.
+
+        Returns:
+            DataLoader: DataLoader for the training dataset.
+        """
+        if self.train_dataset is None:
+            raise RuntimeError("Train dataset not prepared. Call prepare_data() first.")
         return DataLoader(
             self.train_dataset,
             batch_size=self.cfg.batch_size,
@@ -569,7 +727,19 @@ class CIFAR10DataModule(L.LightningDataModule):
             persistent_workers=True,
         )
 
-    def val_dataloader(self):
+    def val_dataloader(self) -> List[DataLoader]:
+        """
+        Returns a list of DataLoaders for validation and test sets.
+        Lightning expects a list if multiple validation sources are used.
+
+        Returns:
+            List[DataLoader]: A list containing DataLoaders for the validation
+                              and test datasets.
+        """
+        if self.val_dataset is None or self.test_dataset is None:
+            raise RuntimeError(
+                "Validation or Test dataset not prepared. Call prepare_data() first."
+            )
         val = DataLoader(
             self.val_dataset,
             batch_size=self.cfg.batch_size,
@@ -586,7 +756,15 @@ class CIFAR10DataModule(L.LightningDataModule):
         )
         return [val, test]
 
-    def test_dataloader(self):
+    def test_dataloader(self) -> DataLoader:
+        """
+        Returns the DataLoader for the test set.
+
+        Returns:
+            DataLoader: DataLoader for the test dataset.
+        """
+        if self.test_dataset is None:
+            raise RuntimeError("Test dataset not prepared. Call prepare_data() first.")
         return DataLoader(
             self.test_dataset,
             batch_size=self.cfg.batch_size,

@@ -54,7 +54,7 @@ test_augmentations:
 cutmix_or_mixup: False
 
 # Extra images settings
-add_extra_images: True
+add_extra_images: False
 extra_images_dir: /home/karol/sd-imbalance/generated_data/cifar10_synaug_sdxl_class_specific
 downsample_classes:
   "airplane": 1

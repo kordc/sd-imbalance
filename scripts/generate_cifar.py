@@ -7,7 +7,6 @@ import torch
 from diffusers import StableDiffusionXLPipeline
 from tqdm import tqdm
 import gc
-from PIL import Image  # Added for potential image processing/checking if needed
 
 # --- CIFAR-10 Classes ---
 cifar10_classes = [

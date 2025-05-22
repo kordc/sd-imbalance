@@ -17,12 +17,34 @@ from sklearn.metrics import (
 from torchmetrics import Accuracy, F1Score
 from torchvision.transforms import v2
 import timm
+from typing import Any, Dict, List, Tuple, Optional
 
-from utils import CIFAR10_CLASSES_REVERSE  # if needed
+from utils import CIFAR10_CLASSES_REVERSE
 
 
 class ResNet18Model(L.LightningModule):
-    def __init__(self, cfg: DictConfig, class_weights=None) -> None:
+    """
+    A LightningModule for a ResNet18 model, including custom training logic,
+    metrics, and dynamic data handling features.
+
+    This class encapsulates the ResNet18 architecture, loss function,
+    optimizers, and the training/validation/test steps, along with
+    custom features like CutMix/MixUp, dynamic upsampling, and detailed
+    metric logging.
+    """
+
+    def __init__(
+        self, cfg: DictConfig, class_weights: Optional[torch.Tensor] = None
+    ) -> None:
+        """
+        Initializes the ResNet18Model.
+
+        Args:
+            cfg (DictConfig): Configuration object containing model, training,
+                              and data parameters.
+            class_weights (Optional[torch.Tensor]): Optional tensor of class weights
+                                                     to be used in the loss function.
+        """
         super().__init__()
         self.cfg = cfg
         # self.model = torchvision.models.resnet18(num_classes=10)
@@ -53,32 +75,52 @@ class ResNet18Model(L.LightningModule):
         self.val_f1 = F1Score(num_classes=10, task="multiclass", average="macro")
         self.test_f1 = F1Score(num_classes=10, task="multiclass", average="macro")
 
-        self.val_confusion_matrices = {}
-        self.test_confusion_matrix = None
+        self.val_confusion_matrices: Dict[int, np.ndarray] = {}
+        self.test_confusion_matrix: Optional[np.ndarray] = None
 
         # Track support for each class in different splits
-        self.val_support = {}
-        self.test_support = None
+        self.val_support: Dict[int, np.ndarray] = {}
+        self.test_support: Optional[np.ndarray] = None
 
         # To track all predictions and targets for more detailed metrics at epoch end
-        self.val_preds = {}  # Keys will be dataloader_idx (0, 1, ...)
-        self.val_targets = {}
-        self.test_preds = []
-        self.test_targets = []
+        self.val_preds: Dict[int, List[torch.Tensor]] = {}
+        self.val_targets: Dict[int, List[torch.Tensor]] = {}
+        self.test_preds: List[torch.Tensor] = []
+        self.test_targets: List[torch.Tensor] = []
 
         self.cutmix = v2.CutMix(num_classes=10)
         self.mixup = v2.MixUp(num_classes=10)
         self.cutmix_or_mixup = v2.RandomChoice([self.cutmix, self.mixup])
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass through the model.
+
+        Args:
+            x (torch.Tensor): Input tensor.
+
+        Returns:
+            torch.Tensor: Output tensor (logits).
+        """
         return self.model(x)
 
-    def custom_cutmix_cat(self, inputs, labels, beta=1.0):
+    def custom_cutmix_cat(
+        self, inputs: torch.Tensor, labels: torch.Tensor, beta: float = 1.0
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Applies CutMix only for images belonging to the cat class (index 3).
         For each cat image in the batch, a different cat image is selected (if available)
         and a random patch from it is pasted over the original image.
         Since both images are cats, the label remains unchanged.
+
+        Args:
+            inputs (torch.Tensor): The input batch of images.
+            labels (torch.Tensor): The corresponding labels for the input images.
+            beta (float): The beta parameter for the Beta distribution used to sample lambda.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: A tuple containing the new inputs
+                                               with CutMix applied and their original labels.
         """
         # Find indices for images with label==3 (cat)
         cat_indices = (labels == 3).nonzero(as_tuple=True)[0]
@@ -115,8 +157,10 @@ class ResNet18Model(L.LightningModule):
             # Note: Since both images are of the same class (cat), we leave the label unchanged.
         return new_inputs, labels
 
-    def freeze_backbone(self):
-        """Freezes the backbone of the model, allowing only the final layer to be trained."""
+    def freeze_backbone(self) -> None:
+        """
+        Freezes the backbone of the model, allowing only the final layer to be trained.
+        """
         # Freeze all backbone parameters
         for param in self.model.parameters():
             param.requires_grad = False
@@ -125,13 +169,23 @@ class ResNet18Model(L.LightningModule):
         for param in self.model.fc.parameters():
             param.requires_grad = True
 
-    def visualize_feature_maps(self, x):
-        """Registers a forward hook on a chosen layer (here layer1)
-        and returns the feature maps produced for the input x.
+    def visualize_feature_maps(self, x: torch.Tensor) -> torch.Tensor:
         """
-        features = []
+        Registers a forward hook on a chosen layer (here layer1)
+        and returns the feature maps produced for the input x.
 
-        def hook_fn(module, input, output) -> None:
+        Args:
+            x (torch.Tensor): Input tensor for which to visualize feature maps.
+
+        Returns:
+            torch.Tensor: The feature maps from the specified layer.
+        """
+        features: List[torch.Tensor] = []
+
+        def hook_fn(
+            module: nn.Module, input: Tuple[torch.Tensor, ...], output: torch.Tensor
+        ) -> None:
+            """Hook function to capture output of a layer."""
             features.append(output)
 
         # Choose layer1 for visualization (can be changed as needed)
@@ -142,7 +196,19 @@ class ResNet18Model(L.LightningModule):
         hook.remove()
         return features[0]
 
-    def training_step(self, batch, batch_idx):
+    def training_step(
+        self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
+    ) -> torch.Tensor:
+        """
+        Performs a single training step.
+
+        Args:
+            batch (Tuple[torch.Tensor, torch.Tensor]): A tuple containing input images and labels.
+            batch_idx (int): The index of the current batch.
+
+        Returns:
+            torch.Tensor: The calculated loss for the current training step.
+        """
         inputs, labels = batch
         if self.cfg.get("cutmix_or_mixup", False):
             inputs, labels = self.cutmix_or_mixup(
@@ -186,7 +252,23 @@ class ResNet18Model(L.LightningModule):
         self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=False)
         return loss
 
-    def validation_step(self, batch, batch_idx, dataloader_idx):
+    def validation_step(
+        self,
+        batch: Tuple[torch.Tensor, torch.Tensor],
+        batch_idx: int,
+        dataloader_idx: int,
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Performs a single validation step.
+
+        Args:
+            batch (Tuple[torch.Tensor, torch.Tensor]): A tuple containing input images and labels.
+            batch_idx (int): The index of the current batch.
+            dataloader_idx (int): The index of the dataloader (e.g., 0 for main val, 1 for clean_val).
+
+        Returns:
+            Dict[str, torch.Tensor]: A dictionary containing the validation loss.
+        """
         inputs, labels = batch
         outputs = self(inputs)
         val_loss = self.criterion(outputs, labels)
@@ -211,7 +293,9 @@ class ResNet18Model(L.LightningModule):
         )
 
         # (Rest of your logic for confusion matrix and support remains unchanged)
-        current_conf = confusion_matrix(labels.cpu(), preds.cpu(), labels=range(10))
+        current_conf = confusion_matrix(
+            labels.cpu(), preds.cpu(), labels=list(range(10))
+        )  # Added explicit labels
         if dataloader_idx not in self.val_confusion_matrices:
             self.val_confusion_matrices[dataloader_idx] = current_conf
         else:
@@ -247,7 +331,19 @@ class ResNet18Model(L.LightningModule):
         self.log(f"{name}_loss", val_loss, on_step=False, on_epoch=True, prog_bar=False)
         return {f"{name}_loss": val_loss}
 
-    def test_step(self, batch, batch_idx):
+    def test_step(
+        self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Performs a single test step.
+
+        Args:
+            batch (Tuple[torch.Tensor, torch.Tensor]): A tuple containing input images and labels.
+            batch_idx (int): The index of the current batch.
+
+        Returns:
+            Dict[str, torch.Tensor]: A dictionary containing the test loss.
+        """
         inputs, labels = batch
         outputs = self(inputs)
 
@@ -270,14 +366,14 @@ class ResNet18Model(L.LightningModule):
             self.test_confusion_matrix = confusion_matrix(
                 labels.cpu(),
                 preds.cpu(),
-                labels=range(10),
+                labels=list(range(10)),  # Added explicit labels
             )
             self.test_support = np.bincount(labels.cpu().numpy(), minlength=10)
         else:
             self.test_confusion_matrix += confusion_matrix(
                 labels.cpu(),
                 preds.cpu(),
-                labels=range(10),
+                labels=list(range(10)),  # Added explicit labels
             )
             self.test_support += np.bincount(labels.cpu().numpy(), minlength=10)
 
@@ -306,6 +402,10 @@ class ResNet18Model(L.LightningModule):
         return {"test_loss": test_loss}
 
     def on_train_epoch_end(self) -> None:
+        """
+        Actions to perform at the end of a training epoch.
+        Resets training metrics and triggers dynamic upsampling if enabled.
+        """
         # Reset training metrics
         self.train_accuracy.reset()
         self.train_f1.reset()
@@ -316,6 +416,11 @@ class ResNet18Model(L.LightningModule):
             self.dynamic_upsample()
 
     def on_validation_epoch_end(self) -> None:
+        """
+        Actions to perform at the end of a validation epoch.
+        Computes and logs per-class metrics (accuracy, F1, precision, recall, support, ratio)
+        for all validation dataloaders and resets validation metrics and storage.
+        """
         for dataloader_idx, conf_matrix in self.val_confusion_matrices.items():
             # Retrieve the corresponding predictions and targets.
             preds_list = self.val_preds[dataloader_idx]
@@ -326,19 +431,25 @@ class ResNet18Model(L.LightningModule):
             name = "val" if dataloader_idx == 0 else "clean_val"
 
             # Per-class accuracy from the confusion matrix.
-            per_class_accuracy = conf_matrix.diagonal() / conf_matrix.sum(axis=1)
+            # Handle division by zero for classes with no true samples
+            per_class_accuracy = np.divide(
+                conf_matrix.diagonal(),
+                conf_matrix.sum(axis=1),
+                out=np.zeros_like(conf_matrix.diagonal(), dtype=float),
+                where=conf_matrix.sum(axis=1) != 0,
+            )
 
             # Compute per-class metrics based on the predictions for this particular set.
             y_pred = all_val_preds.numpy()
             y_true = all_val_targets.numpy()
             f1_per_class = f1_score(
-                y_true, y_pred, labels=range(10), average=None, zero_division=0
+                y_true, y_pred, labels=list(range(10)), average=None, zero_division=0
             )
             precision_per_class = precision_score(
-                y_true, y_pred, labels=range(10), average=None, zero_division=0
+                y_true, y_pred, labels=list(range(10)), average=None, zero_division=0
             )
             recall_per_class = recall_score(
-                y_true, y_pred, labels=range(10), average=None, zero_division=0
+                y_true, y_pred, labels=list(range(10)), average=None, zero_division=0
             )
 
             # Class imbalance (support) for each class already computed per dataloader.
@@ -419,14 +530,22 @@ class ResNet18Model(L.LightningModule):
         self.val_targets = {}
 
     def on_test_epoch_end(self) -> None:
+        """
+        Actions to perform at the end of a test epoch.
+        Computes and logs per-class metrics (accuracy, F1, precision, recall, support, ratio)
+        and resets test metrics and storage.
+        """
         if self.test_confusion_matrix is not None and self.test_preds:
             # Combine all predictions and targets
             all_test_preds = torch.cat(self.test_preds)
             all_test_targets = torch.cat(self.test_targets)
 
-            per_class_accuracy = (
-                self.test_confusion_matrix.diagonal()
-                / self.test_confusion_matrix.sum(axis=1)
+            # Handle division by zero for classes with no true samples
+            per_class_accuracy = np.divide(
+                self.test_confusion_matrix.diagonal(),
+                self.test_confusion_matrix.sum(axis=1),
+                out=np.zeros_like(self.test_confusion_matrix.diagonal(), dtype=float),
+                where=self.test_confusion_matrix.sum(axis=1) != 0,
             )
 
             # Calculate per-class metrics
@@ -434,13 +553,13 @@ class ResNet18Model(L.LightningModule):
             y_true = all_test_targets.numpy()
 
             f1_per_class = f1_score(
-                y_true, y_pred, labels=range(10), average=None, zero_division=0
+                y_true, y_pred, labels=list(range(10)), average=None, zero_division=0
             )
             precision_per_class = precision_score(
-                y_true, y_pred, labels=range(10), average=None, zero_division=0
+                y_true, y_pred, labels=list(range(10)), average=None, zero_division=0
             )
             recall_per_class = recall_score(
-                y_true, y_pred, labels=range(10), average=None, zero_division=0
+                y_true, y_pred, labels=list(range(10)), average=None, zero_division=0
             )
 
             # Class distribution
@@ -518,7 +637,17 @@ class ResNet18Model(L.LightningModule):
         self.test_preds = []
         self.test_targets = []
 
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> Tuple[List[torch.optim.Optimizer], List[Any]]:
+        """
+        Configures the optimizer and learning rate schedulers.
+
+        Uses SGD optimizer with linear warm-up followed by cosine annealing.
+
+        Returns:
+            Tuple[List[torch.optim.Optimizer], List[Any]]: A tuple containing a list
+                                                            of optimizers and a list
+                                                            of learning rate schedulers.
+        """
         optimizer = torch.optim.SGD(
             self.parameters(),
             lr=self.cfg.learning_rate,
@@ -550,7 +679,8 @@ class ResNet18Model(L.LightningModule):
         return [optimizer], [scheduler]
 
     def dynamic_upsample(self) -> None:
-        """Dynamically upsamples the training data by adding candidate images with
+        """
+        Dynamically upsamples the training data by adding candidate images with
         the highest uncertainty. This method is called at the end of every training
         epoch (if enabled via self.cfg.dynamic_upsample) to add N (default 50)
         candidate examples to the training dataset.
@@ -565,9 +695,9 @@ class ResNet18Model(L.LightningModule):
         import numpy as np
         from PIL import Image
 
-        num_to_add = self.cfg.get("num_dynamic_upsample", 50)
-        candidate_dir = self.cfg.extra_images_dir
-        candidate_files = glob.glob(os.path.join(candidate_dir, "*.*"))
+        num_to_add: int = self.cfg.get("num_dynamic_upsample", 50)
+        candidate_dir: str = self.cfg.extra_images_dir
+        candidate_files: List[str] = glob.glob(os.path.join(candidate_dir, "*.*"))
         if not candidate_files:
             self.print(
                 f"No candidate images found in '{candidate_dir}' for dynamic upsampling.",
@@ -582,11 +712,11 @@ class ResNet18Model(L.LightningModule):
             ],
         )
 
-        candidate_scores = []
-        candidate_images = []
+        candidate_scores: List[float] = []
+        candidate_images: List[np.ndarray] = []
 
         self.model.eval()
-        device = self.device
+        device: torch.device = self.device
 
         with torch.no_grad():
             for fpath in candidate_files:
@@ -619,6 +749,7 @@ class ResNet18Model(L.LightningModule):
         selected_images = [candidate_images[i] for i in top_indices]
 
         # Determine the target label for these dynamic examples.
+        target_label: int
         if isinstance(self.cfg.downsample_class, str):
             from utils import (
                 CIFAR10_CLASSES,
@@ -629,7 +760,12 @@ class ResNet18Model(L.LightningModule):
             target_label = self.cfg.downsample_class
 
         try:
-            train_dataset = self.trainer.datamodule.train_dataset.dataset
+            # Accessing the underlying dataset which might be a Subset if random_split was used
+            if hasattr(self.trainer.datamodule.train_dataset, "dataset"):
+                train_dataset = self.trainer.datamodule.train_dataset.dataset
+            else:
+                train_dataset = self.trainer.datamodule.train_dataset
+
         except Exception:
             self.print("Could not access training dataset from datamodule.")
             return

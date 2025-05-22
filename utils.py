@@ -1,14 +1,14 @@
+# utils:
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import torch
-from sklearn.metrics import balanced_accuracy_score
 import random
 import torchvision.transforms.functional as TF
 from PIL import Image
-import torch.nn.functional as F
 import os
 import lightning as L
+from omegaconf import DictConfig
+from typing import Tuple, Optional
 
 CIFAR10_CLASSES = {
     "airplane": 0,
@@ -25,7 +25,13 @@ CIFAR10_CLASSES = {
 CIFAR10_CLASSES_REVERSE = {v: k for k, v in CIFAR10_CLASSES.items()}
 
 
-def set_reproducibility(cfg):
+def set_reproducibility(cfg: DictConfig) -> None:
+    """
+    Sets the random seed for reproducibility across different libraries and environments.
+
+    Args:
+        cfg (DictConfig): A Hydra configuration object containing the 'seed' value.
+    """
     L.seed_everything(cfg.seed, workers=True)
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     torch.use_deterministic_algorithms(True)
@@ -33,9 +39,33 @@ def set_reproducibility(cfg):
     torch.backends.cudnn.benchmark = False
 
 
-def visualize_feature_maps(model, data_module, return_image=False):
+def visualize_feature_maps(
+    model: L.LightningModule,
+    data_module: L.LightningDataModule,
+    return_image: bool = False,
+) -> Optional[Tuple[np.ndarray, Image.Image]]:
+    """
+    Visualizes feature maps for a randomly selected "cat" image from the dataset.
+
+    It fetches a "cat" image, saves its resized version, passes it through
+    the model's feature extraction layers, and optionally returns the feature map
+    and the resized image as numpy arrays. If `return_image` is False,
+    it saves the feature maps to a file.
+
+    Args:
+        model (L.LightningModule): The trained Lightning model with a
+                                   `visualize_feature_maps` method.
+        data_module (L.LightningDataModule): The data module containing the dataset.
+        return_image (bool): If True, returns the feature map and resized image.
+                             If False, saves them to files. Defaults to False.
+
+    Returns:
+        Optional[Tuple[np.ndarray, Image.Image]]: A tuple containing the numpy
+        array of the first feature map and the PIL Image of the resized sample,
+        if `return_image` is True. Returns None otherwise.
+    """
     cat_label = CIFAR10_CLASSES["cat"]
-    # Access the underlying dataset (random_split creates a Subset)
+
     if hasattr(data_module.train_dataset, "dataset"):
         dataset = data_module.train_dataset.dataset
     else:
@@ -56,8 +86,10 @@ def visualize_feature_maps(model, data_module, return_image=False):
             mean = [0.485, 0.456, 0.406]
             std = [0.229, 0.224, 0.225]
 
-            def unnormalize(tensor, mean, std):
-                # Create tensors for mean and std and apply unnormalization.
+            def unnormalize(
+                tensor: torch.Tensor, mean: list[float], std: list[float]
+            ) -> torch.Tensor:
+                """Unnormalizes a tensor image."""
                 mean_tensor = torch.tensor(mean, device=tensor.device).view(
                     -1,
                     1,
@@ -68,7 +100,7 @@ def visualize_feature_maps(model, data_module, return_image=False):
 
             sample = unnormalize(sample, mean, std)
             sample = sample.clamp(0, 1)
-            # Optionally convert to 8-bit values explicitly:
+
             sample_img = TF.to_pil_image(sample)
             sample_img_resized = sample_img.resize(
                 (512, 512),
@@ -93,7 +125,7 @@ def visualize_feature_maps(model, data_module, return_image=False):
             return feature_maps[0, 0].cpu().numpy(), sample_img_resized
         else:
             num_maps = min(feature_maps.shape[1], 8)
-            fig, axs = plt.subplots(1, num_maps, figsize=(num_maps * 2, 2))
+            _, axs = plt.subplots(1, num_maps, figsize=(num_maps * 2, 2))
             for i in range(num_maps):
                 fm = feature_maps[0, i].cpu().numpy()
                 axs[i].imshow(fm, cmap="viridis")
@@ -101,10 +133,24 @@ def visualize_feature_maps(model, data_module, return_image=False):
             feature_maps_save_path = "feature_maps.png"
             plt.savefig(feature_maps_save_path, bbox_inches="tight")
             plt.close()
+    return None
 
 
-def visualize_filters(model, return_image=False):
-    """Visualize the filters of the first convolutional layer in the model."""
+def visualize_filters(
+    model: L.LightningModule, return_image: bool = False
+) -> Optional[plt.Figure]:
+    """
+    Visualizes the filters of the first convolutional layer in the model.
+
+    Args:
+        model (L.LightningModule): The Lightning model containing convolutional layers.
+        return_image (bool): If True, returns the Matplotlib Figure object.
+                             If False, saves the figure to a file. Defaults to False.
+
+    Returns:
+        Optional[plt.Figure]: The Matplotlib Figure object if `return_image` is True.
+                              Returns None otherwise.
+    """
     # Get the first convolutional layer
     first_conv_layer = None
     for module in model.modules():
@@ -114,7 +160,7 @@ def visualize_filters(model, return_image=False):
 
     if first_conv_layer is None:
         print("No convolutional layer found in the model.")
-        return
+        return None
 
     # Get the weights of the first conv layer
     weights = first_conv_layer.weight.data.cpu()
@@ -135,7 +181,6 @@ def visualize_filters(model, return_image=False):
 
     for i in range(grid_size * grid_size):
         if i < n_filters:
-            # For RGB filters, convert to displayable image
             filter_img = weights[i]
             if filter_img.size(0) == 3:  # RGB
                 img = filter_img.permute(1, 2, 0)  # Convert to HWC format
@@ -153,3 +198,35 @@ def visualize_filters(model, return_image=False):
         plt.savefig("conv_filters.png")
         plt.close()
         print("Filter visualization saved to conv_filters.png")
+    return None
+
+
+def prepare_fine_tune(cfg: DictConfig) -> None:
+    """
+    Resets values needed for fine-tuning
+
+    Args:
+        cfg (DictConfig): A Hydra configuration object
+    """
+    L.seed_everything(cfg.seed, workers=True)
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    cfg.downsample_class = None
+    cfg.naive_oversample = False
+    cfg.naive_undersample = False
+    cfg.keep_only_cat = False
+    cfg.smote = False
+    cfg.adasyn = False
+    cfg.label_smoothing = False
+    cfg.class_weighting = False
+    cfg.epochs = 100
+    cfg.add_extra_images = False
+    for class_name in CIFAR10_CLASSES:
+        cfg.downsample_classes[class_name] = 0.1
+        cfg.extra_images_per_class[class_name] = 0
+    cfg.dynamic_upsample = False
+    cfg.cutmix_or_mixup = False
+    cfg.name += "_fine_tuned"
+    cfg.naive_undersample = True
