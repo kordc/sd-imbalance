@@ -8,10 +8,11 @@ services:
 
 
     environment:
-      - HF_TOKEN=${HF_TOKEN} 
+      - HF_TOKEN=${HF_TOKEN}
+      - WANDB_API_KEY=${WANDB_API_KEY}
 
     volumes:
-      - .:/app
+      # - .:/app
 
       - ./data:/app/data                        # For torchvision CIFAR-10 downloads
       - ./generated_data:/app/generated_data    # For generated images from your scripts

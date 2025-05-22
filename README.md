@@ -47,7 +47,6 @@ For a consistent and isolated development/training environment, we recommend usi
 
 1.  **Docker Engine & Docker Compose**:
     *   **Linux (Ubuntu)**: Follow the official Docker Engine installation guide: [Install Docker Engine on Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
-    *   **Windows / macOS**: Download and install [Docker Desktop](https://www.docker.com/products/docker-desktop/).
 
 2.  **NVIDIA Container Toolkit (for GPU acceleration)**:
     *   If you have an NVIDIA GPU and want to use it for training (highly recommended), you **must** install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) on your host system. This allows Docker to access your GPU.
@@ -58,6 +57,12 @@ For a consistent and isolated development/training environment, we recommend usi
         sudo usermod -aG docker $USER
         ```
     *   **Important**: For this change to take effect, you must **log out of your current session and log back in** (or restart your WSL instance).
+4. **Run training with Docker**:
+    *   To run the training script using Docker, execute the following command:
+        ```sh
+        docker compose run --rm trainer uv run train.py
+        ```
+    *   This command will build the Docker image and start the container, running the training script inside it.
 
 ### 🔑 WandB Account Configuration
 

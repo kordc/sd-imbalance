@@ -21,8 +21,6 @@ COPY uv.lock ./
 
 RUN uv sync --locked
 
-# Copy the rest of your application code into the container.
-# This assumes your `train.py` and other scripts/modules are in the root of your project directory.
 COPY . .
 
 CMD ["uv", "run", "train.py"]
