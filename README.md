@@ -39,6 +39,26 @@ We use `uv` for lightning-fast package management and virtual environment creati
     ```
     The `uv sync` command will create a virtual environment (`.venv`) and install all necessary packages.
 
+## 🐳 Running with Docker
+
+For a consistent and isolated development/training environment, we recommend using Docker. This setup also leverages your GPU if available for accelerated training.
+
+### Prerequisites for Docker:
+
+1.  **Docker Engine & Docker Compose**:
+    *   **Linux (Ubuntu)**: Follow the official Docker Engine installation guide: [Install Docker Engine on Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
+    *   **Windows / macOS**: Download and install [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+
+2.  **NVIDIA Container Toolkit (for GPU acceleration)**:
+    *   If you have an NVIDIA GPU and want to use it for training (highly recommended), you **must** install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) on your host system. This allows Docker to access your GPU.
+
+3.  **Docker Daemon Permissions (Linux/WSL only)**:
+    *   After installing Docker on Linux or WSL, your user might not have permissions to interact with the Docker daemon. You'll likely see a "permission denied" error. To fix this, add your user to the `docker` group:
+        ```sh
+        sudo usermod -aG docker $USER
+        ```
+    *   **Important**: For this change to take effect, you must **log out of your current session and log back in** (or restart your WSL instance).
+
 ### 🔑 WandB Account Configuration
 
 We highly recommend configuring your Weights & Biases (WandB) account to track, visualize, and compare your experiments with ease!

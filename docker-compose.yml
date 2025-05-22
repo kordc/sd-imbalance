@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  trainer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    runtime: nvidia
+    
+
+    environment:
+      - HF_TOKEN=${HF_TOKEN} 
+
+    volumes:
+      - .:/app
+
+      - ./data:/app/data                        # For torchvision CIFAR-10 downloads
+      - ./generated_data:/app/generated_data    # For generated images from your scripts
+      - ./internet_reference:/app/internet_reference # For Open Images downloads
+
+      - hf_cache:/root/.cache/huggingface
+
+volumes:
+  hf_cache:
+    driver: local

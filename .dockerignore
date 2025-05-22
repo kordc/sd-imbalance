@@ -1,0 +1,32 @@
+# .dockerignore
+
+# Ignore directories that contain large datasets or generated outputs
+generated_data/
+internet_reference/
+cifar10_raw/
+cifar10_sdxl_turbo_1_per_class/
+cifar10_synaug_sdxl_pdf_style_100k/
+
+# Ignore Python virtual environments and caches
+.venv/
+__pycache__/
+.ruff_cache/
+
+# Ignore Docker-related files (not needed inside the image)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Ignore git specific files
+.git/
+.gitignore
+
+# Ignore any specific large files that are not code or configuration
+model.ckpt
+wandb/ # Weight & Biases run directories can also be very large
+.python-version # Specific to pyenv or similar, not needed in container
+train.log
+results.md
+sample_image.png
+*.log # General log files
+*.lock # uv.lock is explicitly copied, but other locks might be ignored
