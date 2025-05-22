@@ -10,8 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv (the Python package manager) globally.
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
 
@@ -20,7 +19,7 @@ COPY pyproject.toml ./
 
 COPY uv.lock ./
 
-RUN uv install --system
+RUN uv sync --locked
 
 # Copy the rest of your application code into the container.
 # This assumes your `train.py` and other scripts/modules are in the root of your project directory.
