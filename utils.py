@@ -214,6 +214,7 @@ def prepare_fine_tune(cfg: DictConfig) -> None:
         cfg.downsample_classes[class_name] = 0.1
         cfg.extra_images_per_class[class_name] = 0
     cfg.dynamic_upsample = False
-    cfg.cutmix_or_mixup = False
+    if "cutmix_or_mixup" in cfg:
+        cfg.cutmix_or_mixup = False
     cfg.name += "_fine_tuned"
     cfg.naive_undersample = True

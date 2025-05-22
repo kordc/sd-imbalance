@@ -131,6 +131,12 @@ One of the coolest features here is how easy it is to customize your experiments
     python train.py epochs=10 batch_size=128 name="my_short_run"
     ```
 
+## 🧪 Tests
+We have a suite of tests to ensure the integrity and functionality of our code. To run the tests, simply execute:
+```sh
+uv run pytest
+```
+
 ## ⚙️ Configuration Options: Customize Your Experiments!
 Here's an overview of key parameters you can configure:
 

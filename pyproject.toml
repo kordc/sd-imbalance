@@ -29,6 +29,7 @@ dependencies = [
     "pillow>=11.1.0",
     "plotly>=6.0.0",
     "prodigyopt>=1.1.2",
+    "pytest-mock>=3.14.0",
     "python-slugify>=8.0.4",
     "ruff>=0.9.3",
     "scikit-image>=0.25.2",
@@ -53,3 +54,24 @@ diffusers = { git = "https://github.com/huggingface/diffusers" }
 
 [tool.pyright]
 typeCheckingMode = "off"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-mock>=3.0",
+    "ruff>=0.1.0", # You already use ruff, good to have it in dev deps
+]
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
