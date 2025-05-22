@@ -1,5 +1,3 @@
-# scripts/generate_cats_from_lora.py
-
 import numpy as np
 import random
 import torch
@@ -7,11 +5,13 @@ from tqdm import tqdm
 import os
 from typing import List, Dict, Any, Optional  # Added Optional, Dict, Any for typing
 
-# This script generates cat images using a Stable Diffusion XL base model
-# combined with a custom LoRA (Low-Rank Adaptation) checkpoint.
-# It uses a structured prompting approach (inspired by BeautifulPrompt)
-# to create diverse cat images with specific poses, contexts, and camera angles.
-# The output filenames are formatted to be compatible with data.py's _add_extra_images method.
+""" 
+This script generates cat images using a Stable Diffusion XL base model
+combined with a custom LoRA (Low-Rank Adaptation) checkpoint.
+It uses a structured prompting approach (inspired by BeautifulPrompt)
+to create diverse cat images with specific poses, contexts, and camera angles.
+The output filenames are formatted to be compatible with data.py's _add_extra_images method.
+"""
 
 
 def set_seeds(seed: int = 42) -> None:
@@ -21,25 +21,19 @@ def set_seeds(seed: int = 42) -> None:
     Args:
         seed (int): The seed value to be set for all libraries.
     """
-    # Python random module
     random.seed(seed)
-    # NumPy
     np.random.seed(seed)
-    # PyTorch
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)  # If using multi-GPU
-    torch.backends.cudnn.deterministic = True  # Ensures deterministic behavior
-    torch.backends.cudnn.benchmark = False  # Disables optimizations for reproducibility
-    # Environment variable for other libraries or hash-based operations
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-# Example usage
 set_seeds(42)
 
 
-# Expanded list of cat breeds
 cat_breeds: List[str] = [
     "Abyssinian",
     "Aegean",
@@ -144,10 +138,8 @@ cat_breeds: List[str] = [
 ]
 
 
-# Expanded list of prepositions
 prepositions: List[str] = ["on", "under", "next to", "beside", "in front of", "behind"]
 
-# Furniture types that fit with the prepositions
 furniture_or_outdoor: Dict[str, List[str]] = {
     "on": [
         # Indoor furniture
@@ -351,7 +343,6 @@ camera_angles: List[str] = [
     "a photo taken from behind",
 ]
 
-# List of gaze directions
 gaze_directions: List[str] = [
     "looking straight ahead",
     "looking up",
@@ -372,9 +363,7 @@ def make_img(
     num_inference_steps: int = 25,
     guidance_scale: float = 0.0,
     num_images: int = 4,
-    pipe: Optional[
-        Any
-    ] = None,  # Using Any for DiffusionPipeline to avoid circular import if not imported
+    pipe: Optional[Any] = None,
 ) -> None:
     """
     Generates cat images using a given Stable Diffusion XL pipeline (potentially with LoRA).
@@ -395,50 +384,36 @@ def make_img(
         )
         return
 
-    # Directory to save generated images
     output_dir: str = folder
     os.makedirs(output_dir, exist_ok=True)
-    set_seeds(42)  # Ensure reproducibility for random choices
+    set_seeds(42)
 
     print(f"Starting image generation for {num_images} images into {output_dir}...")
     for i in tqdm(range(num_images), desc="Generating Images"):
-        # Randomly select components for the prompt
         breed: str = random.choice(cat_breeds)
         preposition: str = random.choice(prepositions)
         furniture: str = random.choice(furniture_or_outdoor[preposition])
         angle: str = random.choice(camera_angles)
         gaze: str = random.choice(gaze_directions)
 
-        # Note: The original code had redundant random.choice calls for camera_angles and gaze_directions
-        # that were not assigned to variables. These are removed for clarity.
-
-        # Construct the prompt using f-strings for readability
         prompt: str = (
             f"{angle} of a {breed} cat {preposition} the {furniture}, {gaze}. "
             "The cat has realistic fur textures, intricate details, and sharp features, "
             "with soft lighting and a clear focus. The image has a shallow depth of field, "
             "emphasizing the cat in fine detail. 8k, cinematic, photorealistic"
         )
-        # print(prompt) # Uncomment to see the prompt for each image
-
-        # Ensure pipeline is on the correct dtype for generation
-        pipe.to(torch.float16)  # SDXL uses float16 by default for performance
+        pipe.to(torch.float16)
 
         try:
-            # Generate image
             result = pipe(
                 prompt,
                 num_inference_steps=num_inference_steps,
-                # cross_attention_kwargs={"scale": 1.0}, # This might be specific to certain LoRAs, keep if needed
                 guidance_scale=guidance_scale,
                 width=512,
                 height=512,
             )
-            image = result.images[0]  # Get the first image from the list
+            image = result.images[0]
 
-            # Save the generated image
-            # Filename format: class_name_index_preposition_furniture.png
-            # This format is compatible with data.py's parsing (class_name is "cat")
             output_path: str = os.path.join(
                 output_dir,
                 f"cat_{i:05d}_{preposition.replace(' ', '_')}_{furniture.replace(' ', '_')}.png",
@@ -447,7 +422,7 @@ def make_img(
 
         except Exception as e:
             tqdm.write(f"Failed to generate image {i} with prompt '{prompt}': {e}")
-            # Clear CUDA cache to recover from potential OOM errors
+
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             torch.cuda.synchronize()
@@ -461,9 +436,8 @@ if __name__ == "__main__":
     from huggingface_hub import whoami
     from slugify import slugify
     from pathlib import Path
-    import gc  # Import gc for garbage collection
+    import gc
 
-    # Clear CUDA cache before starting
     if torch.cuda.is_available():
         print("Clearing CUDA cache before starting...")
         torch.cuda.empty_cache()
@@ -472,23 +446,18 @@ if __name__ == "__main__":
         print("CUDA cache cleared.")
 
     print("Loading DiffusionPipeline for LoRA generation...")
-    # Load the base pipeline
     try:
         base_pipe = DiffusionPipeline.from_pretrained(
             "stabilityai/stable-diffusion-xl-base-1.0",
             torch_dtype=torch.float16,
             variant="fp16",
-        ).to("cuda")  # Ensure it's moved to GPU if available
+        ).to("cuda")
         print("Base pipeline loaded.")
     except Exception as e:
         print(f"Error loading base pipeline: {e}. Exiting.")
         exit(1)
 
-    # Authenticate with Hugging Face Hub to load private LoRA if necessary
     try:
-        # Assuming Hugging Face token is accessible or login has been done
-        # The path should point to the directory containing the token, typically ~/.cache/huggingface/token
-        # or it can be explicitly set via huggingface_hub.login()
         _ = whoami(
             token=os.getenv(
                 "HF_TOKEN", Path("/root/.cache/huggingface/token").read_text().strip()
@@ -499,21 +468,18 @@ if __name__ == "__main__":
         print(
             f"Hugging Face authentication failed: {e}. Make sure you are logged in (huggingface-cli login) or HF_TOKEN env var is set."
         )
-        # Proceed without LoRA if auth fails, or exit if LoRA is critical
-        pass  # Allow script to continue, it might work if LoRA is public or not strictly needed by the pipe
+        pass
 
-    # Define LoRA parameters
     username = whoami(
         token=os.getenv(
             "HF_TOKEN", Path("/root/.cache/huggingface/token").read_text().strip()
         )
     )["name"]
-    output_dir_slug = slugify("cifar10cats")  # Slugify for a safe directory name
+    output_dir_slug = slugify("cifar10cats")
     repo_id = f"{username}/{output_dir_slug}"
 
     print(f"Attempting to load LoRA weights from {repo_id}...")
     try:
-        # Load LoRA weights onto the base pipeline
         base_pipe.load_lora_weights(
             repo_id, weight_name="pytorch_lora_weights.safetensors"
         )
@@ -522,20 +488,16 @@ if __name__ == "__main__":
         print(
             f"Error loading LoRA weights: {e}. Ensure the LoRA exists and is accessible. Proceeding without LoRA."
         )
-        # If LoRA loading fails, you might want to exit or handle this differently based on requirements.
 
-    # Call the image generation function
-    # The output folder name also includes "cat" to be compatible with data.py's parsing
     make_img(
-        folder="./lora_generated_cats",  # A specific folder for LoRA generated cats
-        num_images=100000,  # Example number, adjust as needed
+        folder="./lora_generated_cats",
+        num_images=100000,
         pipe=base_pipe,
-        num_inference_steps=25,  # Adjusted based on common usage for SDXL
-        guidance_scale=7.0,  # Common guidance scale for SDXL
+        num_inference_steps=25,
+        guidance_scale=7.0,
     )
 
     print("Script finished.")
-    # Final cleanup of the pipeline
     if "base_pipe" in locals() and base_pipe is not None:
         del base_pipe
     gc.collect()

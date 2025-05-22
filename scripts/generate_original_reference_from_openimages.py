@@ -1,33 +1,13 @@
-# scripts/generate_original_reference_from_openimages.py
-
 import os
 import shutil
 from typing import List, Dict, Optional
 
-# This script downloads real-world images from the Open Images Dataset V6.
-# It maps CIFAR-10 class names to Open Images concepts and downloads a specified
-# number of images per class. All images are saved into a single flat directory
-# with filenames formatted as `class_name_image_id.jpg` to be compatible with
-# `data.py`'s `_add_extra_images` method.
-
-# Attempt to import openimages.download
-try:
-    # Note: openimages-py version 0.1.0 changed 'download_dataset' arguments
-    # to 'dest_dir', 'class_labels', 'limit'. Older versions might use 'dataset_dir', 'class_list', 'max_examples_per_class'.
-    # This script assumes the newer API.
-    from openimages.download import download_dataset
-except ImportError:
-    print("Error: The 'openimages-py' library is not installed.")
-    print("Please install it using: pip install openimages-py")
-    exit(1)
+from openimages.download import download_dataset
 
 
-# Mapping CIFAR-10 class names to Open Images Dataset v6 Concept Names.
-# The key must match the class name used in data.py's CIFAR10_CLASSES.
-# The value is the corresponding human-readable concept name in Open Images.
 CIFAR10_TO_OID_CONCEPT_MAP: Dict[str, str] = {
     "airplane": "Airplane",
-    "automobile": "Car",  # Open Images typically uses "Car" for general automobiles
+    "automobile": "Car",
     "bird": "Bird",
     "cat": "Cat",
     "deer": "Deer",
@@ -79,26 +59,17 @@ def download_images(
         )
 
         try:
-            # The 'openimages-py' library creates a nested structure.
-            # Example: dest_dir/concept_name_lower/images/
             download_dataset(
                 dest_dir=temp_download_base,
                 class_labels=[oid_concept_name],
                 limit=limit,
-                # The 'openimages-py' library handles internal directory structure.
-                # It typically creates `dest_dir/train/concept_name/` or `dest_dir/concept_name_lower/images/`
-                # depending on version/arguments. We'll check the latter.
             )
 
-            # After download, find the actual directory where images are saved by `openimages-py`
-            # The structure changed in newer versions, often it's `dest_dir/concept_name_lower/images/`
-            # for direct class downloads.
             potential_source_dir: str = os.path.join(
                 temp_download_base,
                 oid_concept_name.lower().replace(" ", "_"),
-                "images",  # Lowercase and underscore
+                "images",
             )
-            # Fallback for older/different structures if the primary doesn't exist
             if not os.path.exists(potential_source_dir):
                 potential_source_dir = os.path.join(
                     temp_download_base, "train", oid_concept_name
@@ -116,18 +87,13 @@ def download_images(
             moved_count: int = 0
             for filename in os.listdir(potential_source_dir):
                 if filename.lower().endswith((".jpg", ".jpeg", ".png")):
-                    original_image_id: str = os.path.splitext(filename)[
-                        0
-                    ]  # e.g., '0a1b2c3d4e5f6g7h.jpg' -> '0a1b2c3d4e5f6g7h'
-                    # The new filename includes the CIFAR-10 class name prefix for data.py
+                    original_image_id: str = os.path.splitext(filename)[0]
                     new_filename: str = f"{cifar10_class_name}_{original_image_id}.jpg"
 
                     src_path: str = os.path.join(potential_source_dir, filename)
                     dst_path: str = os.path.join(output_dir, new_filename)
 
-                    if not os.path.exists(
-                        dst_path
-                    ):  # Only move if it doesn't already exist
+                    if not os.path.exists(dst_path):
                         shutil.move(src_path, dst_path)
                         moved_count += 1
             print(
@@ -139,11 +105,8 @@ def download_images(
                 f"Error downloading or processing images for class {cifar10_class_name}: {e}"
             )
         finally:
-            # Clean up the overall temporary staging base directory after processing all classes
-            # (Moved cleanup to outside the loop for robustness)
             pass
 
-    # Final cleanup of the overall temporary staging base directory
     if os.path.exists(temp_download_base):
         try:
             shutil.rmtree(temp_download_base)
@@ -157,7 +120,6 @@ def download_images(
 
 
 if __name__ == "__main__":
-    # CIFAR-10 class names, these will be used for mapping and filename prefixes
     cifar10_classes_to_download: List[str] = [
         "airplane",
         "automobile",
@@ -170,11 +132,10 @@ if __name__ == "__main__":
         "ship",
         "truck",
     ]
-    # This directory will contain all downloaded images in a flat structure
     output_directory_for_extra_images: str = "internet_reference"
 
     download_images(
         cifar10_classes_to_download,
         output_directory_for_extra_images,
-        limit=5000,  # Each class will attempt to download 5000 images
+        limit=5000,
     )

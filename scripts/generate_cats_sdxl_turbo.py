@@ -1,5 +1,3 @@
-# scripts/generate_cats_sdxl_turbo.py
-
 import os
 import random
 import torch
@@ -8,11 +6,12 @@ from tqdm import tqdm
 import gc
 from typing import List, Optional  # Import List, Optional for type hinting
 
-# This script generates cat images using the Stable Diffusion XL Turbo pipeline.
-# It employs a simplified "modifier + class" prompting strategy (inspired by SYNAuG paper)
-# to create diverse cat images. Output filenames are formatted to be compatible
-# with data.py's _add_extra_images method.
-
+"""
+This script generates cat images using the Stable Diffusion XL Turbo pipeline.
+It employs a simplified "modifier + class" prompting strategy (inspired by SYNAuG paper)
+to create diverse cat images. Output filenames are formatted to be compatible
+with data.py's _add_extra_images method.
+"""
 cat_modifiers: List[str] = [
     "realistic",
     "detailed",
@@ -59,12 +58,10 @@ def make_img(
         print("Error: A list of modifiers must be provided.")
         return
 
-    # Directory to save generated images
     output_dir: str = folder
     os.makedirs(output_dir, exist_ok=True)
     print(f"Saving images to: {output_dir}")
 
-    # Load SDXL-Turbo pipeline
     print("Loading SDXL-Turbo pipeline...")
     pipe: Optional[StableDiffusionXLPipeline] = None
     try:
@@ -80,23 +77,18 @@ def make_img(
         print(
             "Please ensure you have the necessary libraries installed, sufficient VRAM, and are logged in (`huggingface-cli login`)."
         )
-        # Attempt to clear memory if loading failed
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         gc.collect()
-        return  # Exit if pipeline loading fails
+        return
 
-    # Move to GPU and apply optimizations
     if torch.cuda.is_available():
         print("Moving pipeline to GPU and applying optimizations...")
         try:
             pipe = pipe.to("cuda")
-            # Using enable_attention_slicing can help with VRAM, but for 1-step turbo, it might not be critical
-            # pipe.enable_attention_slicing(slice_size="auto")
             print("Optimizations applied.")
         except Exception as e:
             print(f"Error moving pipeline to GPU: {e}. Trying CPU.")
-            # Fallback to CPU if moving to GPU fails
             try:
                 pipe = pipe.to("cpu")
                 print("Running on CPU.")
@@ -115,22 +107,17 @@ def make_img(
             gc.collect()
             return
 
-    # Generate synthetic images
     print(f"Starting image generation for {num_images} images...")
     for i in tqdm(range(num_images), desc="Generating Images"):
-        # --- NEW PROMPTING STRATEGY based on SYNAuG ---
         selected_modifier: str = random.choice(modifier_list)
-        prompt: str = f"a photo of {selected_modifier} cat"  # Using the "modifier + class" structure
-        # ---------------------------------------------
+        prompt: str = f"a photo of {selected_modifier} cat"
 
         try:
-            # Generate image using SDXL-Turbo parameters
-            # Use torch.inference_mode() for potential slight speedup and memory saving
             with torch.inference_mode():
                 image_result = pipe(
                     prompt=prompt,
-                    guidance_scale=0.0,  # SDXL-Turbo specific, usually 0.0 or 1.0
-                    num_inference_steps=1,  # SDXL-Turbo specific, usually 1 or 2
+                    guidance_scale=0.0,
+                    num_inference_steps=1,
                     width=512,
                     height=512,
                 )
@@ -140,16 +127,12 @@ def make_img(
                     tqdm.write(
                         f"\nWarning: Image generation failed for prompt: '{prompt}'. No image returned."
                     )
-                    continue  # Skip to next iteration
+                    continue
 
-            # Define output path
-            # Filename format: class_name_index_modifier.png (e.g., cat_00000_realistic.png)
-            # This format is compatible with data.py's parsing (class_name is "cat")
             output_path: str = os.path.join(
                 output_dir, f"cat_{i:05d}_{selected_modifier.replace(' ', '_')}.png"
-            )  # Added modifier to filename
+            )
 
-            # Save the image
             image_to_save.save(output_path)
 
         except torch.cuda.OutOfMemoryError:
@@ -160,7 +143,7 @@ def make_img(
                 torch.cuda.empty_cache()
             gc.collect()
             torch.cuda.synchronize()
-            continue  # Skip to next iteration
+            continue
         except Exception as e:
             tqdm.write(
                 f"\nError generating image {i} with prompt: '{prompt}': {e}. Skipping."
@@ -169,10 +152,9 @@ def make_img(
                 torch.cuda.empty_cache()
             gc.collect()
             torch.cuda.synchronize()
-            continue  # Skip to next iteration
+            continue
 
     print(f"\nFinished generating {num_images} images.")
-    # Final cleanup of the pipeline
     if pipe is not None:
         del pipe
     gc.collect()
@@ -181,18 +163,16 @@ def make_img(
 
 
 if __name__ == "__main__":
-    # Clear CUDA cache before starting
     print("Clearing CUDA cache...")
     torch.cuda.empty_cache()
     gc.collect()
     torch.cuda.synchronize()
     print("Cache cleared.")
 
-    # Run the image generation
     make_img(
-        folder="./sdxl_turbo_synaug_style",  # Output folder name
-        num_images=7000,  # Number of images to generate
-        modifier_list=cat_modifiers,  # Pass the list of modifiers
+        folder="./sdxl_turbo_synaug_style",
+        num_images=7000,
+        modifier_list=cat_modifiers,
     )
 
     print("Script finished.")
