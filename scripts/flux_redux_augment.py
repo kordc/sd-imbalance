@@ -1,8 +1,11 @@
 import random
-
+import os
+import glob
 import torch
 from diffusers import FluxPipeline, FluxPriorReduxPipeline
 from PIL import Image
+from tqdm import tqdm
+from typing import Optional
 
 
 class FluxReduxAugment:
@@ -25,12 +28,14 @@ class FluxReduxAugment:
         self.probability = probability
 
         # Load the Flux Redux pipelines once
-        self.flux_prior_redux = FluxPriorReduxPipeline.from_pretrained(
-            "black-forest-labs/FLUX.1-Redux-dev",
-            torch_dtype=torch.bfloat16,
-        ).to(self.device)
+        self.flux_prior_redux: FluxPriorReduxPipeline = (
+            FluxPriorReduxPipeline.from_pretrained(
+                "black-forest-labs/FLUX.1-Redux-dev",
+                torch_dtype=torch.bfloat16,
+            ).to(self.device)
+        )
 
-        self.flux_pipeline = FluxPipeline.from_pretrained(
+        self.flux_pipeline: FluxPipeline = FluxPipeline.from_pretrained(
             "black-forest-labs/FLUX.1-dev",
             text_encoder=None,
             text_encoder_2=None,
@@ -45,6 +50,10 @@ class FluxReduxAugment:
             return image
 
         # Pass the image through the prior redux pipeline.
+        # Ensure image is in RGB and suitable for the model
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+
         pipe_prior_output = self.flux_prior_redux(image)
 
         # Create a generator on the correct device and seed it.
@@ -59,3 +68,118 @@ class FluxReduxAugment:
         )
         # Return the first image from the result (as a PIL image).
         return result.images[0]
+
+
+def main() -> None:
+    input_dir: str = "./notebooks/cats"
+    output_dir: str = "./notebooks/cats_redux"
+    # Klasa, którą reprezentują obrazy z input_dir.
+    # W tym przypadku, ponieważ input_dir to 'cats', zakładamy, że to 'cat'.
+    # Należy to dostosować, jeśli input_dir zawiera inne klasy.
+    image_class_name: str = "cat"
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Look for common image file extensions.
+    image_paths: list[str] = []
+    for ext in ("*.jpg", "*.jpeg", "*.png"):
+        image_paths.extend(glob.glob(os.path.join(input_dir, ext)))
+
+    # Sort and limit to first 50 images.
+    image_paths = sorted(image_paths)[:50]
+
+    if not image_paths:
+        print(f"No images found in {input_dir}. Exiting.")
+        return
+
+    num_aug_per_image: int = 99  # 50 images * 99 augmentations = 4950 new examples
+
+    # Initialize the augmentation instance with probability 1.0.
+    flux_augment = FluxReduxAugment(
+        guidance_scale=2.5,
+        num_inference_steps=50,
+        seed=0,  # initial seed; will be updated for each augmentation
+        device="cuda" if torch.cuda.is_available() else "cpu",  # Use CUDA if available
+        probability=1.0,  # always apply the augmentation
+    )
+
+    # Ensure pipelines are loaded before starting processing loop
+    try:
+        # Accessing an attribute forces lazy loading if not already done, or just confirms device
+        _ = flux_augment.flux_pipeline.device
+        _ = flux_augment.flux_prior_redux.device
+        print(f"Flux pipelines initialized on {flux_augment.device}.")
+    except Exception as e:
+        print(
+            f"Failed to initialize Flux pipelines: {e}. Please check your setup (Hugging Face token, VRAM, etc.). Exiting."
+        )
+        return
+
+    total_augmented_images: int = 0
+    # Use tqdm to show progress over images
+    for img_path in tqdm(image_paths, desc="Processing images for Flux Redux"):
+        img: Optional[Image.Image] = None
+        try:
+            img = Image.open(img_path).convert("RGB")
+        except Exception as e:
+            print(f"\nError opening or converting image {img_path}: {e}. Skipping.")
+            continue
+
+        original_file_base_name: str = os.path.splitext(os.path.basename(img_path))[0]
+
+        # Zapisz oryginalny obraz z prefixem klasy, aby był zgodny z oczekiwaniami data.py
+        # np. "cat_originalfilename.png"
+        original_output_name: str = (
+            f"{image_class_name}_{original_file_base_name}_orig.png"
+        )
+        original_output_path: str = os.path.join(output_dir, original_output_name)
+        if not os.path.exists(
+            original_output_path
+        ):  # Unikaj wielokrotnego zapisywania oryginału
+            img.save(original_output_path)
+
+        # tqdm for augmentations per image
+        for i in tqdm(
+            range(num_aug_per_image),
+            desc=f"Augmenting {original_file_base_name}",
+            leave=False,
+        ):
+            try:
+                # Update seed for variation (you can also use a large range for more unique seeds)
+                flux_augment.seed = random.randint(0, 2**32 - 1)
+                augmented_img: Image.Image = flux_augment(img)
+
+                # Upewnij się, że nazwa pliku wyjściowego zaczyna się od nazwy klasy
+                # np. "cat_originalfilename_aug_0.png"
+                out_name: str = (
+                    f"{image_class_name}_{original_file_base_name}_aug_{i}.png"
+                )
+                out_path: str = os.path.join(output_dir, out_name)
+
+                # Check if file already exists to avoid overwriting or redundant saving
+                if not os.path.exists(out_path):
+                    augmented_img.save(out_path)
+                    total_augmented_images += 1
+            except Exception as e:
+                tqdm.write(
+                    f"Error augmenting image {img_path} (aug {i}): {e}. Skipping this augmentation."
+                )
+                # Clear CUDA cache on error to recover memory
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                torch.cuda.synchronize()  # Ensure operations are complete before clearing
+
+    print(
+        f"\nFinished. Total {total_augmented_images} augmented images generated in {output_dir}."
+    )
+
+
+if __name__ == "__main__":
+    # Optional: Clear CUDA cache before starting main process to free up memory
+    if torch.cuda.is_available():
+        print("Clearing CUDA cache before starting...")
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()  # Ensure cleanup is complete
+        print("CUDA cache cleared.")
+
+    main()
