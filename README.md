@@ -17,7 +17,7 @@ Want to dive straight in? Here's how to get your environment ready and run a def
     ```sh
     uv run train.py
     ```
-    (Don't forget to configure your WandB account for experiment tracking! See [WandB Setup](#wandb-account-configuration) below).
+    (Don't forget to configure your WandB account for experiment tracking! See [WandB section](#-wandb-account-configuration) below.)
 
 ## 🛠️ Setup: Get Your Environment Ready!
 
