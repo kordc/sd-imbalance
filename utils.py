@@ -1,4 +1,3 @@
-# utils:
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -71,7 +70,6 @@ def visualize_feature_maps(
     else:
         dataset = data_module.train_dataset
 
-    # Find indices for samples with the "cat" label.
     cat_indices = [i for i, target in enumerate(dataset.targets) if target == cat_label]
     if not cat_indices:
         pass
@@ -79,10 +77,8 @@ def visualize_feature_maps(
         chosen_index = random.choice(cat_indices)
         sample, label = dataset[chosen_index]
 
-        # Save the original sample image.
-        # If sample is a tensor, convert to PIL image.
         if torch.is_tensor(sample):
-            sample = sample.cpu()  # Ensure it's on CPU.
+            sample = sample.cpu()
             mean = [0.485, 0.456, 0.406]
             std = [0.229, 0.224, 0.225]
 
@@ -116,10 +112,7 @@ def visualize_feature_maps(
         sample_img_resized.save(sample_save_path)
 
         sample = dataset[chosen_index][0].unsqueeze(0).to(model.device)
-        # Get feature maps from a designated layer (see method below)
         feature_maps = model.visualize_feature_maps(sample)
-
-        # Plot and save a few feature maps (e.g. first 8 channels)
 
         if return_image:
             return feature_maps[0, 0].cpu().numpy(), sample_img_resized
@@ -151,7 +144,6 @@ def visualize_filters(
         Optional[plt.Figure]: The Matplotlib Figure object if `return_image` is True.
                               Returns None otherwise.
     """
-    # Get the first convolutional layer
     first_conv_layer = None
     for module in model.modules():
         if isinstance(module, torch.nn.Conv2d):
@@ -162,15 +154,12 @@ def visualize_filters(
         print("No convolutional layer found in the model.")
         return None
 
-    # Get the weights of the first conv layer
     weights = first_conv_layer.weight.data.cpu()
 
-    # Normalize the weights for better visualization
     min_val = weights.min()
     max_val = weights.max()
     weights = (weights - min_val) / (max_val - min_val)
 
-    # Plot the filters
     n_filters = min(weights.size(0), 64)  # Limit to 64 filters
     grid_size = int(np.ceil(np.sqrt(n_filters)))
 
@@ -182,7 +171,7 @@ def visualize_filters(
     for i in range(grid_size * grid_size):
         if i < n_filters:
             filter_img = weights[i]
-            if filter_img.size(0) == 3:  # RGB
+            if filter_img.size(0) == 3:
                 img = filter_img.permute(1, 2, 0)  # Convert to HWC format
             else:  # Grayscale
                 img = filter_img[0]

@@ -43,7 +43,6 @@ def main(cfg: DictConfig) -> None:
         cfg, class_weights=data_module.class_weights
     )
 
-    # Read initial checkpoint if provided
     if cfg.get("checkpoint_path"):
         model = ResNet18Model.load_from_checkpoint(
             checkpoint_path=cfg.checkpoint_path,

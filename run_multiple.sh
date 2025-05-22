@@ -1,13 +1,11 @@
 #!/bin/bash
 
-# --- Configuration ---
 CLASSES=("airplane" "automobile" "bird" "cat" "deer" "dog" "frog" "horse" "ship" "truck")
 PROJECT_NAME="test-cifar-new-project"
 BASE_RUN_NAME="1percent run 17pdf" # Base name for the run
 BASE_EXTRA_IMAGES_DIR="/home/karol/sd-imbalance/generated_data/cifar10_synaug_sdxl_pdf_style_v2" # Base dir for extra images
 DOWNSAMPLE_VALUE=0.01
-EXTRA_IMAGES_PER_CLASS_VALUE=4950 # The value from your example command for the specific class
-
+EXTRA_IMAGES_PER_CLASS_VALUE=4950
 
 NUM_PARALLEL_JOBS=$(nproc)
 
