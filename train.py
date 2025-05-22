@@ -124,6 +124,14 @@ def main(cfg: DictConfig) -> None:
         )
         filter_img = visualize_filters(model, return_image=True)
 
+        if cfg.get("finetune_on_checkpoint", False):
+            wandb.init(
+                config=config_dict,
+                project=cfg.project,
+                name=cfg.name + "viz",
+                resume="allow",
+            )
+
         if feature_map_img is not None:
             wandb.log(
                 {"feature_maps": wandb.Image(feature_map_img, caption="Feature Maps")}

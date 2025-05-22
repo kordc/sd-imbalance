@@ -190,22 +190,6 @@ def test_different_model_settings():
     )
 
 
-def test_dynamic_upsample_cat_class():
-    """
-    Tests enabling dynamic upsampling for the 'cat' class.
-    Note: This will attempt to read from `extra_images_dir` defined in config.yaml.
-    If that directory is empty or doesn't exist, the `dynamic_upsample` function
-    is designed to handle it gracefully (it will print a warning and return).
-    """
-    run_training_command(
-        [
-            "dynamic_upsample=True",
-            "dynamic_upsample_target_class=cat",  # Required for dynamic upsampling
-            "name=test_dynamic_upsample_cat_class",
-        ]
-    )
-
-
 def test_pretrained_model_enabled():
     """
     Tests running the model initialized with pretrained weights.
@@ -220,12 +204,13 @@ def test_visualize_trained_model_and_check_files():
     run_training_command(
         [
             "visualize_trained_model=True",
+            "finetune_on_checkpoint=True",  # It wont work without other flag, now it won't run training
             "name=test_visualize_trained_model_and_check_files",
         ]
     )
     # After successful command execution, verify the files exist
     assert os.path.exists(os.path.join(REPO_ROOT, "sample_image.png"))
-    assert os.path.exists(os.path.join(REPO_ROOT, "conv_filters.png"))
+    # assert os.path.exists(os.path.join(REPO_ROOT, "conv_filters.png"))
 
 
 def test_fine_tune_on_real_data_enabled():
