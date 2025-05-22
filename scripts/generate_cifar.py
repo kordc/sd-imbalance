@@ -1,12 +1,29 @@
+# scripts/generate_cifar.py
+
 import os
 import random
+from PIL import Image
 import torch
 from diffusers import StableDiffusionXLPipeline
 from tqdm import tqdm
 import gc
+from typing import (
+    List,
+    Dict,
+    Any,
+    Optional,
+    Union,
+)  # Added Union for interpolation_dict keys
+
+# This script generates synthetic images for all 10 CIFAR-10 classes
+# using the Stable Diffusion XL Turbo pipeline. It uses an extensive
+# prompting strategy with class-specific descriptors, contexts, and
+# general quality modifiers to create diverse and realistic images.
+# Images are saved into class-specific subfolders, and filenames are compatible
+# with data.py's image parsing.
 
 # --- CIFAR-10 Classes ---
-cifar10_classes = [
+cifar10_classes: List[str] = [
     "airplane",
     "automobile",
     "bird",
@@ -19,7 +36,8 @@ cifar10_classes = [
     "truck",
 ]
 
-class_specific_concepts = {
+# Detailed class-specific concepts for prompting
+class_specific_concepts: Dict[str, Dict[str, List[str]]] = {
     "airplane": {
         "descriptor_type": [
             "jet airplane",
@@ -1850,7 +1868,7 @@ class_specific_concepts = {
 
 # --- General Quality Modifiers ---
 # Expanded list for more variety
-quality_modifiers = [
+quality_modifiers: List[str] = [
     "photorealistic",
     "high resolution",
     "detailed",
@@ -1960,22 +1978,27 @@ quality_modifiers = [
 
 
 def make_cifar10_style_images(
-    base_folder: str = "./cifar10_synaug_sdxl_pdf_style_100k",  # Adjusted folder name
-    num_images_per_class: int = 100000,  # Target 100k images
-    classes: list = None,
-    concept_map: dict = None,
+    base_folder: str = "./cifar10_synaug_sdxl_pdf_style_100k",
+    num_images_per_class: int = 100000,
+    classes: Optional[List[str]] = None,
+    concept_map: Optional[Dict[str, Dict[str, List[str]]]] = None,
 ) -> None:
     """
-    Generates images for specified classes using SDXL-Turbo pipeline
-    with expanded prompting inspired by the PDF's structured approach.
-    Saves images into class-specific subfolders.
+    Generates images for specified CIFAR-10 classes using the Stable Diffusion XL Turbo pipeline.
+    It constructs prompts using a rich set of class-specific descriptors, contexts, and
+    general quality modifiers to create diverse and realistic images.
+    Images are saved into class-specific subfolders, and filenames are structured to be compatible
+    with `data.py`'s `_add_extra_images` method.
 
     Args:
-        base_folder (str): The root directory to save generated class folders.
-        num_images_per_class (int): How many images to generate for each class.
-        classes (list): A list of class names (strings).
-        concept_map (dict): A dictionary mapping class names to sub-dictionaries
-                            containing lists for 'descriptor_type' and 'context_action'.
+        base_folder (str): The root directory where generated class folders will be created.
+        num_images_per_class (int): The target number of images to generate for each class.
+        classes (Optional[List[str]]): A list of class names (strings) for which to generate images.
+                                       If None or empty, an error is printed.
+        concept_map (Optional[Dict[str, Dict[str, List[str]]]]): A dictionary mapping class names to
+                                                                   sub-dictionaries containing lists for
+                                                                   'descriptor_type' and 'context_action'.
+                                                                   If None or empty, an error is printed.
     """
     if classes is None or len(classes) == 0:
         print("Error: A list of classes must be provided.")
@@ -1990,7 +2013,7 @@ def make_cifar10_style_images(
 
     # Load SDXL-Turbo pipeline
     print("Loading SDXL-Turbo pipeline...")
-    pipe = None  # Initialize pipe to None
+    pipe: Optional[StableDiffusionXLPipeline] = None
     try:
         pipe = StableDiffusionXLPipeline.from_pretrained(
             "stabilityai/sdxl-turbo",
@@ -2004,7 +2027,7 @@ def make_cifar10_style_images(
         print(
             "Please ensure you have the necessary libraries installed, sufficient VRAM, and are logged in (`huggingface-cli login`)."
         )
-        # Attempt to clear memory if loading failed, although less likely to help here
+        # Attempt to clear memory if loading failed
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         gc.collect()
@@ -2015,10 +2038,7 @@ def make_cifar10_style_images(
         print("Moving pipeline to GPU...")
         try:
             pipe = pipe.to("cuda")
-            # Optional: Enable model cpu offload if VRAM is extremely limited, but will be slower.
-            # pipe.enable_model_cpu_offload()
-            # Optional: Attention slicing (might not be needed for 1-step, test performance)
-            # pipe.enable_attention_slicing()
+            # pipe.enable_attention_slicing() # Optional: may not be needed for 1-step turbo
             print("Pipeline moved to CUDA.")
         except Exception as e:
             print(f"Error moving pipeline to CUDA: {e}. Trying CPU.")
@@ -2075,15 +2095,17 @@ def make_cifar10_style_images(
         generated_count = 0
         pbar = tqdm(total=num_images_per_class, desc=f"Generating {class_name}")
         while generated_count < num_images_per_class:
-            image = None  # Initialize image to None for error handling
+            image_to_save: Optional[Image.Image] = (
+                None  # Initialize image to None for error handling
+            )
             try:
                 # --- PDF-Inspired Prompting with expanded lists ---
-                selected_descriptor = random.choice(descriptors)
-                selected_context = random.choice(contexts)
-                selected_quality = random.choice(quality_modifiers)
+                selected_descriptor: str = random.choice(descriptors)
+                selected_context: str = random.choice(contexts)
+                selected_quality: str = random.choice(quality_modifiers)
 
                 # Construct the prompt
-                prompt = f"{selected_quality} photo of a {selected_descriptor} {class_name} {selected_context}"
+                prompt: str = f"{selected_quality} photo of a {selected_descriptor} {class_name} {selected_context}"
 
                 # Generate image using SDXL-Turbo parameters
                 # Use torch.inference_mode() for potential slight speedup and memory saving
@@ -2101,42 +2123,30 @@ def make_cifar10_style_images(
                     )
                     # Check if image generation was successful and returned images
                     if image_result and image_result.images:
-                        image = image_result.images[0]
+                        image_to_save = image_result.images[0]
                     else:
-                        print(
+                        tqdm.write(
                             f"\nWarning: Image generation failed for prompt: '{prompt}'. No image returned."
                         )
                         # Optional: add a small delay or retry logic here
                         continue  # Skip to next iteration
 
                 if (
-                    image is None
+                    image_to_save is None
                 ):  # Double check if image is None after generation attempt
-                    print(
+                    tqdm.write(
                         f"\nError: Image object is None after generation for prompt: '{prompt}'. Skipping."
                     )
                     continue
 
-                # Define output path - make filename safe and reasonably short
-                safe_descriptor = "".join(
-                    c if c.isalnum() else "_" for c in selected_descriptor
-                ).strip("_")[:30]
-                safe_context = "".join(
-                    c if c.isalnum() else "_" for c in selected_context
-                ).strip("_")[:40]
-                safe_quality = "".join(
-                    c if c.isalnum() else "_" for c in selected_quality
-                ).strip("_")[:20]
-
-                # Use a simpler counter-based filename for large datasets to avoid extremely long names
-                # output_filename = f"{class_name}_{generated_count:06d}_{safe_descriptor}_{safe_context}.png"
-                output_filename = (
-                    f"{class_name}_{generated_count:06d}.png"  # Simpler filename
-                )
-                output_path = os.path.join(class_folder, output_filename)
+                # Define output path - make filename simpler for large datasets
+                # Filename format: class_name_index.png (e.g., cat_000000.png)
+                # This format is compatible with data.py's parsing
+                output_filename: str = f"{class_name}_{generated_count:06d}.png"
+                output_path: str = os.path.join(class_folder, output_filename)
 
                 # Save the image
-                image.save(output_path)
+                image_to_save.save(output_path)
                 generated_count += 1
                 pbar.update(1)
 
@@ -2146,8 +2156,8 @@ def make_cifar10_style_images(
                 )
                 # Clear cache immediately upon OOM
                 # Explicitly delete potentially large objects
-                if image is not None:
-                    del image
+                if image_to_save is not None:
+                    del image_to_save
                 if "image_result" in locals():
                     del image_result
                 if torch.cuda.is_available():
@@ -2165,8 +2175,8 @@ def make_cifar10_style_images(
                 )
                 pbar.write(f"Error details: {e}")
                 # Optional: Clear cache even on other errors if memory seems correlated
-                if image is not None:
-                    del image
+                if image_to_save is not None:
+                    del image_to_save
                 if "image_result" in locals():
                     del image_result
                 if torch.cuda.is_available():
@@ -2175,23 +2185,16 @@ def make_cifar10_style_images(
                 continue  # Skip to the next iteration
             finally:
                 # Explicitly delete objects from the loop iteration to help GC
-                if image is not None:
+                if image_to_save is not None:
                     try:
-                        del image
-                    except (
-                        NameError
-                    ):  # Handle cases where image might not have been assigned
+                        del image_to_save
+                    except NameError:
                         pass
                 if "image_result" in locals():
                     try:
                         del image_result
                     except NameError:
                         pass
-                # Optional: Force GC collection more frequently for very long runs, but can slow down generation
-                # if generated_count % 100 == 0:
-                #     gc.collect()
-                #     if torch.cuda.is_available():
-                #         torch.cuda.empty_cache()
 
         pbar.close()
         print(f"Finished generating {generated_count} images for class '{class_name}'.")
