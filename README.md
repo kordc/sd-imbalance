@@ -17,6 +17,13 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.5.26/install.p
 uv sync
 ```
 
+You should also configure your wandb account. Go to https://wandb.ai/authorize, and set it as a system variable:
+```sh
+WANDB_API_KEY=$YOUR_API_KEY
+```
+
+Note, that this is an obligatory step if you want to track experiments. Unless, you'll be still able to save logs but not to see any plots.
+
 ## Usage
 - The project uses [Hydra](https://hydra.cc/) for configuration management, allowing you to easily override parameters from the config/config.yaml file via command-line arguments.
 - All scripts are meant to run inside a virtual environment. `uv sync` creates one, and to use it you can either use `uv run ...` instead of calling `python ...`, or casually enable venv on your device:
