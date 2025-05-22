@@ -98,7 +98,7 @@ All image generation scripts are designed so that their output is compatible wit
 
 ---
 
-### 7. `notebooks`
+### 7. `notebooks/`
 
 This directory contains:
 - [`analisys.ipynb`](notebooks/analysis.ipynb) notebook that provides an analisys on the differences between synthetic and real CIFAR10 data.
