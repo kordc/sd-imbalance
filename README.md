@@ -134,8 +134,14 @@ One of the coolest features here is how easy it is to customize your experiments
 ## 🧪 Tests
 We have a suite of tests to ensure the integrity and functionality of our code. To run the tests, simply execute:
 ```sh
-uv run pytest
+uv run pytest tests/
 ```
+You can also run specific tests by specifying the test file or directory:
+```sh
+uv run pytest tests/test_training_configs.py
+uv run pytest tests/test_mocked_data_configs.py
+```
+
 
 ## ⚙️ Configuration Options: Customize Your Experiments!
 Here's an overview of key parameters you can configure:
