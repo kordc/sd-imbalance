@@ -1,5 +1,3 @@
-# !pip install diffusers transformers torch tqdm sentencepiece accelerate ipywidgets
-# !huggingface-cli login
 import os
 import random
 import torch
@@ -7,8 +5,6 @@ from diffusers import StableDiffusionXLPipeline
 from tqdm import tqdm
 import gc
 
-# --- NEW: List of Modifiers inspired by SYNAuG paper ---
-# The paper mentions using 20 modifiers, here's a sample list
 cat_modifiers = [
     "realistic",
     "detailed",
@@ -32,10 +28,8 @@ cat_modifiers = [
     "looking at camera",
     "illustration style",
     "painted",
-    "sketch style",  # Added some style variations
+    "sketch style",
 ]
-
-# --- REMOVED the previous long list of cat_prompts ---
 
 
 def make_img(folder: str = "./tmp", num_images=10000, modifier_list=None) -> None:

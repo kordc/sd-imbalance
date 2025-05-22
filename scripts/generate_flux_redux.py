@@ -2,7 +2,7 @@ import glob
 import os
 import random
 
-from flux_redux_augment import FluxReduxAugment
+from scripts.flux_redux_augment import FluxReduxAugment
 from PIL import Image
 from tqdm import tqdm
 

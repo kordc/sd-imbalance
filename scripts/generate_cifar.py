@@ -1,6 +1,3 @@
-# !pip install diffusers transformers torch tqdm accelerate ipywidgets Pillow
-# !huggingface-cli login # You might need to run this in your terminal if you haven't before
-
 import os
 import random
 import torch
@@ -21,11 +18,6 @@ cifar10_classes = [
     "ship",
     "truck",
 ]
-
-# --- Class-Specific Concepts (Expanded to ~100 each) ---
-# We adapt the PDF's <BREED> <PREPOSITION> <FURNITURE> idea
-# into more general <DESCRIPTOR/TYPE> <CONTEXT/ACTION> concepts
-# relevant to each CIFAR-10 class, now with ~100 items per list.
 
 class_specific_concepts = {
     "airplane": {
