@@ -13,6 +13,9 @@ from torch.utils.data import DataLoader, random_split
 from torchvision.transforms import v2 as transforms
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+import cv2
+import clip
+
 from utils import CIFAR10_CLASSES
 
 
@@ -273,8 +276,6 @@ class DownsampledCIFAR10(torchvision.datasets.CIFAR10):
         - Filtering images based on CLIP similarity to existing original or synthetic samples.
         - Normalizing synthetic images to match the mean/std of the original dataset or using CLAHE.
         """
-        import cv2
-        import clip
         import torch
         from torchvision import transforms
 

@@ -1,4 +1,3 @@
-# tests/test_mocked_data_configs.py
 import subprocess
 import os
 import shutil
@@ -6,7 +5,6 @@ import pytest
 from unittest.mock import patch
 import numpy as np
 import torch
-from torchvision.transforms import v2 as transforms  # Using v2 as in your data.py
 from PIL import Image
 
 # Get the root directory of the repository (where train.py is located)
@@ -125,7 +123,7 @@ def run_training_command_mocked(overrides: list[str]):
     # because that's where DownsampledCIFAR10 inherits from it.
     with patch("data.torchvision.datasets.CIFAR10", new=MockCIFAR10):
         try:
-            result = subprocess.run(
+            _ = subprocess.run(
                 command,
                 cwd=REPO_ROOT,
                 check=True,

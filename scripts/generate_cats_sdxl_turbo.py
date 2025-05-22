@@ -4,7 +4,7 @@ import torch
 from diffusers import StableDiffusionXLPipeline
 from tqdm import tqdm
 import gc
-from typing import List, Optional, Any  # Import List, Optional, Any for type hinting
+from typing import List, Optional  # Import List, Optional, Any for type hinting
 import argparse  # Import argparse
 
 

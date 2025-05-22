@@ -3,7 +3,7 @@ import random
 import torch
 from tqdm import tqdm
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import argparse  # Import argparse
 import gc  # For garbage collection
 

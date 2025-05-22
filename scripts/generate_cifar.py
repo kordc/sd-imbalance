@@ -13,8 +13,6 @@ from typing import (
     Dict,
     Optional,
 )
-from huggingface_hub import whoami  # For HF token management
-from pathlib import Path  # For HF token management
 
 """
 This script generates synthetic images for all 10 CIFAR-10 classes

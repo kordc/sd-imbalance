@@ -1,4 +1,3 @@
-# tests/test_training_configs.py
 import subprocess
 import os
 import shutil
@@ -56,7 +55,7 @@ def run_training_command(overrides: list[str]):
     try:
         # Use capture_output=True to suppress stdout/stderr unless an error occurs
         # or if you want to inspect output for debugging.
-        result = subprocess.run(
+        _ = subprocess.run(
             command,
             cwd=REPO_ROOT,
             check=True,  # Raises CalledProcessError if the command returns a non-zero exit code
