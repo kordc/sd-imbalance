@@ -1,4 +1,4 @@
 * Ogarnij skrypty  ładnie
 * dodaj testy
-* dodaj skrypty generowania danych do readme
 * PROTECT MAIN
+* dodaj dokumentację jakąś typu pydocs

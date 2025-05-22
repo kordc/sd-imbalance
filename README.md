@@ -44,6 +44,8 @@ source .venv/bin/activate
 
 This README focuses on `uv run` approach. For more information please follow [uv documentation](https://docs.astral.sh/uv/)
 
+## Generating data
+To generate data please use provided scripts. Note, that a folder with generated samples should have a consistent naming strategy - `CLASSNAME_(...).jpg`. For more information please refer to [README](scripts/README.md).
 
 ## Training
 To train the model with the default configuration (defined in config/config.yaml), run:
