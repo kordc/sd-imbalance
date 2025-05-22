@@ -3,7 +3,7 @@
 import os
 import torchvision
 import torchvision.transforms as transforms
-from typing import List, Tuple, Any
+from typing import List
 from PIL import Image
 
 # This script downloads the original CIFAR-10 training dataset and saves
@@ -23,7 +23,7 @@ def main() -> None:
     # Define the root folder to save CIFAR-10 images
     output_folder: str = "cifar10_raw"
 
-    print(f"Downloading CIFAR-10 training dataset to ./data if not exists...")
+    print("Downloading CIFAR-10 training dataset to ./data if not exists...")
     # Download CIFAR-10 dataset
     transform = transforms.ToTensor()  # Transform to tensor for saving
     dataset = torchvision.datasets.CIFAR10(
