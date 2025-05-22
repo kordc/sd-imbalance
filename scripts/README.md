@@ -4,6 +4,8 @@ This directory contains scripts supporting the process of data management and sy
 
 All image generation scripts are designed so that their output is compatible with the `_add_extra_images` mechanism in the `data.py` file. This means that filenames include a class name prefix (e.g., `cat_imageid.jpg`), and all files for a given generation batch are located in a single, flat target directory (e.g., `internet_reference/`).
 
+> Note, that some models are gated and if you want to run them, you must have access to them from huggingface. When you have granted access please login to your account in cmd: `uv run huggingface-cli login`
+
 ## Table of Contents
 
 1.  [`flux_redux_augment.py`](#1-flux_redux_augmentpy)

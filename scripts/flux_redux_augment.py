@@ -94,8 +94,8 @@ def main() -> None:
     multiple times per image, and saves the augmented images to an output directory.
     Output filenames are structured to be compatible with `data.py`'s `_add_extra_images` method.
     """
-    input_dir: str = "./notebooks/cats"
-    output_dir: str = "./notebooks/cats_redux"
+    input_dir: str = "./generated_data/cats_chosen"
+    output_dir: str = "./generated_data/cats_redux"
 
     image_class_name: str = "cat"
 

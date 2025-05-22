@@ -171,7 +171,7 @@ if __name__ == "__main__":
 
     make_img(
         folder="./sdxl_turbo_synaug_style",
-        num_images=7000,
+        num_images=1,
         modifier_list=cat_modifiers,
     )
 

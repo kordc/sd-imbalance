@@ -2195,8 +2195,8 @@ if __name__ == "__main__":
         print("Cache cleared.")
 
     make_cifar10_style_images(
-        base_folder="./cifar10_sdxl_turbo_100k_per_class",
-        num_images_per_class=100000,
+        base_folder="./cifar10_sdxl_turbo_1_per_class",
+        num_images_per_class=1,
         classes=cifar10_classes,
         concept_map=class_specific_concepts,
     )
