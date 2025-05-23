@@ -15,7 +15,7 @@ Want to dive straight in? Here's how to get your environment ready and run a def
     ```
 3.  **Run a Training Experiment:**
     ```sh
-    uv run train.py
+    uv run train.py epochs=1
     ```
     (Don't forget to configure your WandB account for experiment tracking! See [WandB section](#-wandb-account-configuration) below.)
 
@@ -97,8 +97,14 @@ To generate data, please use the provided scripts. Remember that a folder with g
 
 For more detailed information on data generation scripts and their usage, please refer to the dedicated [README](scripts/README.md).
 
+## 📄 Documentation
+To generate documentation go to `docs` directory and type `uv run make html`:
+```sh
+cd docs/ && uv run make html
+```
+
 ## 🏋️‍♀️ Training Your Model
-o kick off a training run with the default settings (as defined in [config/config.yaml](config/config.yaml)), simply execute:
+To kick off a training run with the default settings (as defined in [config/config.yaml](config/config.yaml)), simply execute:
 ```sh
 uv run train.py
 ```
