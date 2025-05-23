@@ -150,6 +150,8 @@ uv run pytest tests/test_training_configs.py
 uv run pytest tests/test_mocked_data_configs.py
 ```
 
+## Results
+You can check poster and results' table with explaination in results/ directory.
 
 ## ⚙️ Configuration Options: Customize Your Experiments!
 Here's an overview of key parameters you can configure:
