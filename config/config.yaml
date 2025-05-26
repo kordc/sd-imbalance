@@ -17,19 +17,22 @@ name: base # WANDB run name
 project: cifar10_project # WANDB project name
 
 # Project/model settings
-epochs: 1
+epochs: 100
 compile: True
 batch_size: 256
 learning_rate: 0.1
 val_size: 0.2
-num_workers: 2
+num_workers: 1
 seed: 42
-checkpoint_path:
+checkpoint_path: # /home/karol/sd-imbalance/fullCIFAR.ckpt
 visualize_trained_model: True
 freeze_backbone: False
 fine_tune_on_real_data: False
 pretrained: False
 finetune_on_checkpoint: False
+test_only: false # New flag: If true, only run testing
+test_on_real: false # New flag: If true, test_dataloader uses extra_images_dir
+test_images_dir: # /home/karol/sd-imbalance/internet_reference
 
 # Dataset settings
 augmentations:
@@ -60,7 +63,7 @@ downsample_classes:
   "airplane": 1
   "automobile": 1
   "bird": 1
-  "cat": 0.1
+  "cat": 1
   "deer": 1
   "dog": 1
   "frog": 1
@@ -71,7 +74,7 @@ extra_images_per_class:
   "airplane": 0
   "automobile": 0
   "bird": 0
-  "cat": 4950
+  "cat": 0
   "deer": 0
   "dog": 0
   "frog": 0

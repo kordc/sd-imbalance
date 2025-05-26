@@ -11,6 +11,7 @@ from omegaconf import DictConfig
 from PIL import Image
 from torch.utils.data import DataLoader, random_split
 from torchvision.transforms import v2 as transforms
+from torch.utils.data import Dataset
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import cv2
@@ -554,7 +555,9 @@ class CIFAR10DataModule(L.LightningDataModule):
         )
         self.train_dataset: Optional[torch.utils.data.Subset] = None
         self.val_dataset: Optional[torch.utils.data.Subset] = None
-        self.test_dataset: Optional[torchvision.datasets.CIFAR10] = None
+        self.test_dataset: Optional[
+            Union[torchvision.datasets.CIFAR10, RealImagesTestDataset]
+        ] = None
 
         self.data_prepared = False
         self.class_weights: Optional[torch.Tensor] = None
@@ -624,7 +627,7 @@ class CIFAR10DataModule(L.LightningDataModule):
         LightningDataModule hook to download and prepare data (e.g., dataset objects).
         This is called once across all processes.
         It handles dataset initialization, downsampling, resampling, adding extra images,
-        and calculating class weights.
+        calculating class weights, and setting up the appropriate test set.
         """
         if self.data_prepared:
             return
@@ -660,53 +663,127 @@ class CIFAR10DataModule(L.LightningDataModule):
         )
 
         new_mean, new_std = full_train_dataset.get_new_std_mean()
+        print(
+            f"Derived normalization for test transform - Mean: {new_mean}, Std: {new_std}"
+        )
 
         self.test_transform = transforms.Compose(
             [transforms.ToTensor(), transforms.Normalize(mean=new_mean, std=new_std)]
         )
 
-        self.test_dataset = torchvision.datasets.CIFAR10(
-            root="./data",
-            train=False,
-            transform=self.test_transform,
-            download=download_flag,
-        )
+        if self.cfg.get("test_on_real", False):
+            print(
+                f"Configuring test set to use real images from: {self.cfg.extra_images_dir}"
+            )
+            self.test_dataset = RealImagesTestDataset(
+                extra_images_dir=self.cfg.test_images_dir,
+                transform=self.test_transform,
+            )
+            if len(self.test_dataset) == 0:
+                print(
+                    f"Warning: RealImagesTestDataset from {self.cfg.extra_images_dir} resulted in 0 images. "
+                    "Testing might fail or produce no results."
+                )
+        else:
+            print("Configuring test set to use standard CIFAR-10 test data.")
+            self.test_dataset = torchvision.datasets.CIFAR10(
+                root="./data",
+                train=False,
+                transform=self.test_transform,
+                download=download_flag,
+            )
 
         val_size = int(self.cfg.val_size * len(full_train_dataset))
         train_size = len(full_train_dataset) - val_size
-        self.train_dataset, self.val_dataset = random_split(
-            full_train_dataset,
-            [train_size, val_size],
-        )
 
-        # Access targets through the original dataset for `random_split` subsets
-        if hasattr(self.train_dataset, "dataset") and hasattr(
-            self.train_dataset.dataset, "targets"
-        ):
-            train_targets = torch.tensor(
-                [
-                    self.train_dataset.dataset.targets[i]
-                    for i in self.train_dataset.indices
-                ],
-            )
-        else:
-            # Fallback if the structure is different, though unlikely for standard datasets
-            # This might require iterating the actual dataloader if targets are not easily accessible
-            # from a Subset or custom dataset without a 'targets' attribute.
+        if train_size <= 0 or val_size < 0:  # val_size can be 0 if val_size is 0.0
             print(
-                "Warning: Could not directly access targets from train_dataset for class weight calculation."
+                f"Warning: Train size ({train_size}) or val size ({val_size}) is not positive. Adjust val_size or dataset."
             )
-            # Placeholder, robust solution would involve sampling or re-loading data
-            train_targets = torch.tensor(
-                [0]
-            )  # Dummy to avoid crash, but this will be wrong.
+            # Handle empty full_train_dataset or too small dataset for split
+            if len(full_train_dataset) == 0:
+                print("Error: full_train_dataset is empty. Cannot proceed.")
+                # Optionally raise an error or set datasets to None carefully
+                self.train_dataset = None  # Or an empty dataset
+                self.val_dataset = None
+            else:  # If full_train_dataset is not empty, but split is problematic, assign all to train
+                self.train_dataset = full_train_dataset
+                self.val_dataset = torch.utils.data.Subset(
+                    full_train_dataset, []
+                )  # Empty subset for val
+        else:
+            self.train_dataset, self.val_dataset = random_split(
+                full_train_dataset,
+                [train_size, val_size],
+                generator=torch.Generator().manual_seed(
+                    self.cfg.seed
+                ),  # for reproducibility
+            )
 
-        class_counts = torch.bincount(train_targets)
-        # Avoid division by zero for classes that might have 0 count
-        class_weights = 1.0 / (
-            class_counts.float() + 1e-6
-        )  # Add epsilon to avoid division by zero
-        self.class_weights = class_weights / class_weights.sum()
+        # Calculate class weights based on the actual training split
+        if self.train_dataset and (
+            isinstance(self.train_dataset, torch.utils.data.Subset)
+            and len(self.train_dataset) > 0
+        ):
+            if hasattr(self.train_dataset.dataset, "targets"):
+                # Ensure indices are valid for the original dataset's targets
+                train_indices = self.train_dataset.indices
+                if (
+                    max(train_indices) < len(self.train_dataset.dataset.targets)
+                    and min(train_indices) >= 0
+                ):
+                    train_targets_list = [
+                        self.train_dataset.dataset.targets[i] for i in train_indices
+                    ]
+                    if train_targets_list:  # Check if list is not empty
+                        train_targets = torch.tensor(train_targets_list)
+                        class_counts = torch.bincount(
+                            train_targets, minlength=len(CIFAR10_CLASSES)
+                        )
+                        class_weights_val = 1.0 / (class_counts.float() + 1e-6)
+                        self.class_weights = class_weights_val / class_weights_val.sum()
+                    else:
+                        print(
+                            "Warning: No targets found in training subset for class weight calculation."
+                        )
+                        self.class_weights = None
+                else:
+                    print(
+                        "Warning: Invalid indices in training subset for class weight calculation."
+                    )
+                    self.class_weights = None
+            else:
+                print(
+                    "Warning: Original dataset for training subset does not have 'targets' attribute."
+                )
+                self.class_weights = None
+        elif (
+            self.train_dataset
+            and isinstance(self.train_dataset, DownsampledCIFAR10)
+            and len(self.train_dataset) > 0
+        ):  # If train_dataset is the full one
+            if hasattr(self.train_dataset, "targets") and self.train_dataset.targets:
+                train_targets = torch.tensor(self.train_dataset.targets)
+                class_counts = torch.bincount(
+                    train_targets, minlength=len(CIFAR10_CLASSES)
+                )
+                class_weights_val = 1.0 / (class_counts.float() + 1e-6)
+                self.class_weights = class_weights_val / class_weights_val.sum()
+            else:
+                print(
+                    "Warning: full_train_dataset (used as train_dataset) has no targets for class_weights."
+                )
+                self.class_weights = None
+        else:
+            print(
+                "Warning: Training dataset is empty or not set, cannot calculate class weights."
+            )
+            self.class_weights = None
+
+        if self.class_weights is not None:
+            print(f"Calculated class weights: {self.class_weights.tolist()}")
+        else:
+            print("Class weights set to None.")
 
         self.data_prepared = True
 
@@ -759,16 +836,122 @@ class CIFAR10DataModule(L.LightningDataModule):
     def test_dataloader(self) -> DataLoader:
         """
         Returns the DataLoader for the test set.
+        The test set used (standard CIFAR-10 or custom real images) is determined
+        by the 'test_on_real' config flag during 'prepare_data'.
 
         Returns:
             DataLoader: DataLoader for the test dataset.
         """
         if self.test_dataset is None:
-            raise RuntimeError("Test dataset not prepared. Call prepare_data() first.")
+            # This check might be redundant if prepare_data always sets it or raises error
+            raise RuntimeError(
+                "Test dataset not prepared. Call prepare_data() first or check for errors during preparation."
+            )
+        if len(self.test_dataset) == 0:
+            print("Warning: Test dataset is empty. Test dataloader will be empty.")
+            # Return an empty DataLoader or handle as an error depending on desired behavior
+            # For now, let it proceed; Lightning will handle an empty dataloader.
+
         return DataLoader(
             self.test_dataset,
             batch_size=self.cfg.batch_size,
             shuffle=False,
             num_workers=self.cfg.num_workers,
-            persistent_workers=True,
+            persistent_workers=True
+            if self.cfg.num_workers > 0
+            else False,  # persistent_workers only if num_workers > 0
         )
+
+
+class RealImagesTestDataset(Dataset):
+    """
+    A PyTorch Dataset for loading test images exclusively from a specified directory.
+    Images are expected to be named in a way that their class can be inferred
+    (e.g., 'prefix_classname_suffix.jpg') and belong to CIFAR-10 classes.
+    """
+
+    def __init__(
+        self,
+        extra_images_dir: str,
+        transform: Optional[transforms.Compose] = None,
+        cifar10_classes: Dict[str, int] = CIFAR10_CLASSES,
+    ):
+        """
+        Args:
+            extra_images_dir (str): Directory containing the images.
+            transform (Optional[transforms.Compose]): Transformations to apply to the images.
+            cifar10_classes (Dict[str, int]): Mapping from class names to class indices.
+        """
+        self.extra_images_dir = extra_images_dir
+        self.transform = transform
+        self.cifar10_classes = cifar10_classes
+        self.data: List[Image.Image] = []
+        self.targets: List[int] = []
+        self._load_images()
+
+    def _load_images(self) -> None:
+        image_files = glob(os.path.join(self.extra_images_dir, "*.*"))
+        if not image_files:
+            print(
+                f"Warning: No images found in {self.extra_images_dir} for RealImagesTestDataset."
+            )
+            return
+
+        loaded_count = 0
+        skipped_count = 0
+        for fpath in image_files:
+            filename = os.path.basename(fpath)
+            try:
+                # Mimic class name extraction from DownsampledCIFAR10._add_extra_images
+                # Assumes filename format like 'prefix_CLASSNAME_suffix.ext'
+                parts = filename.split("_")
+                if len(parts) > 1:
+                    class_name_candidate = parts[0]
+                    if class_name_candidate in self.cifar10_classes:
+                        class_idx = self.cifar10_classes[class_name_candidate]
+                        try:
+                            with Image.open(fpath) as img:
+                                img = img.convert("RGB")
+                                img = img.resize((32, 32))
+                                self.data.append(img)
+                                self.targets.append(class_idx)
+                                loaded_count += 1
+                        except Exception as e:
+                            print(
+                                f"Error processing image {fpath} for RealImagesTestDataset: {e}"
+                            )
+                            skipped_count += 1
+                    else:
+                        # Class name not found or not a CIFAR class
+                        skipped_count += 1
+                else:
+                    # Filename doesn't match expected 'prefix_CLASSNAME_...' format
+                    skipped_count += 1
+            except IndexError:
+                # Handles cases where filename.split("_")[1] fails (e.g. "cat.png")
+                skipped_count += 1
+            except Exception as e:
+                print(
+                    f"Skipping file '{filename}' in RealImagesTestDataset due to parsing error: {e}"
+                )
+                skipped_count += 1
+
+        if not self.data:
+            print(
+                f"No valid images loaded from {self.extra_images_dir} for RealImagesTestDataset. "
+                f"Ensure filenames are like 'prefix_CLASSNAME_suffix.ext' (e.g., 'img_cat_001.png') "
+                f"and CLASSNAME is a valid CIFAR-10 class. Processed {len(image_files)} files, skipped {skipped_count}."
+            )
+        else:
+            print(
+                f"Loaded {loaded_count} images from {self.extra_images_dir} for RealImagesTestDataset. Skipped {skipped_count} files."
+            )
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+    def __getitem__(self, idx: int) -> Tuple[Any, int]:
+        img, target = self.data[idx], self.targets[idx]
+        if self.transform:
+            img = self.transform(img)
+        return img, target

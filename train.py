@@ -1,3 +1,5 @@
+# train.py
+
 import hydra
 import lightning as L
 import torch
@@ -87,140 +89,312 @@ def main(cfg: DictConfig) -> None:
 
     # Initialize data module
     data_module = CIFAR10DataModule(cfg)
-    data_module.prepare_data()  # This call prepares datasets, computes class weights, etc.
+    # data_module.prepare_data() will be called:
+    # - explicitly before trainer.test() in test_only mode
+    # - implicitly by trainer.fit() or trainer.test() if not called before
 
-    # Initialize model
+    config_dict: Dict[str, Any] = OmegaConf.to_container(cfg, resolve=True)  # For WandB
+
+    # --- Test-Only Mode ---
+    if cfg.get("test_only", False):
+        print("INFO: Running in test-only mode.")
+        data_module.prepare_data()  # Crucial to prepare the correct test_dataset
+
+        if not cfg.get("checkpoint_path"):
+            print(
+                "ERROR: 'checkpoint_path' must be provided in config for test-only mode."
+            )
+            return
+
+        model = ResNet18Model.load_from_checkpoint(
+            checkpoint_path=cfg.checkpoint_path,
+            cfg=cfg,
+            class_weights=data_module.class_weights,
+        )
+        print(f"INFO: Loaded model from checkpoint: {cfg.checkpoint_path}")
+
+        if cfg.compile:
+            print("INFO: Compiling model for test-only mode...")
+            model = torch.compile(model)
+
+        torch.set_float32_matmul_precision("medium")
+
+        run_name_suffix = "_test_only"
+        if cfg.get("test_on_real", False):
+            run_name_suffix += "_real"
+
+        wandb_logger_test = WandbLogger(
+            project=cfg.project, name=cfg.name + run_name_suffix, log_model=False
+        )
+        wandb.init(
+            config=config_dict,
+            project=cfg.project,
+            name=cfg.name + run_name_suffix,
+            resume="allow",
+        )
+
+        print("INFO: Initializing Trainer for testing...")
+        tester = L.Trainer(
+            accelerator="auto",
+            devices="auto",
+            logger=[wandb_logger_test],
+        )
+
+        print("INFO: Starting testing...")
+        tester.test(model, datamodule=data_module)
+        print("INFO: Testing finished.")
+
+        if cfg.get("visualize_trained_model", False):
+            print("INFO: Visualizing model post-testing...")
+            # Ensure wandb run is active for logging visualizations
+            if wandb.run is None:
+                wandb.init(
+                    config=config_dict,
+                    project=cfg.project,
+                    name=cfg.name + run_name_suffix + "_viz",
+                    resume="allow",
+                )
+
+            feature_map_img, resized_img = visualize_feature_maps(
+                model, data_module, return_image=True
+            )
+            filter_img = visualize_filters(model, return_image=True)
+            if feature_map_img is not None:
+                wandb.log(
+                    {
+                        "feature_maps_test_only": wandb.Image(
+                            feature_map_img, caption="Feature Maps (Test Only)"
+                        )
+                    }
+                )
+            if resized_img is not None:
+                wandb.log(
+                    {
+                        "resized_img_test_only": wandb.Image(
+                            resized_img, caption="Resized Image (Test Only)"
+                        )
+                    }
+                )
+            if filter_img is not None:
+                wandb.log(
+                    {
+                        "conv_filters_test_only": wandb.Image(
+                            filter_img, caption="Conv Filters (Test Only)"
+                        )
+                    }
+                )
+            print("INFO: Visualization finished.")
+
+        if wandb.run:
+            wandb.finish()
+        return  # Exit after test-only mode
+
+    # --- Full Training/Fine-tuning Mode (Original Logic) ---
+    print("INFO: Running in standard training/fine-tuning mode.")
+    data_module.prepare_data()  # Prepare data for training, val, and test
+
     model: L.LightningModule = ResNet18Model(
         cfg, class_weights=data_module.class_weights
     )
 
-    # Load model from checkpoint if specified
-    if cfg.get("checkpoint_path"):
+    if cfg.get("checkpoint_path") and not (
+        cfg.finetune_on_checkpoint or cfg.fine_tune_on_real_data
+    ):  # Only load if not starting fine-tuning from scratch
+        print(
+            f"INFO: Loading model from checkpoint for continued training or evaluation: {cfg.checkpoint_path}"
+        )
+        # Note: If finetune_on_checkpoint is true, loading happens inside that block.
+        # This handles cases where checkpoint_path is for resuming normal training or just initial eval.
         model = ResNet18Model.load_from_checkpoint(
             checkpoint_path=cfg.checkpoint_path,
             cfg=cfg,
             class_weights=data_module.class_weights,
         )
 
-    # Compile model for performance if enabled
     if cfg.compile:
+        print("INFO: Compiling model...")
         model = torch.compile(model)
 
-    # Set PyTorch matrix multiplication precision
     torch.set_float32_matmul_precision("medium")
 
-    # Convert Hydra config to a standard dictionary for WandB logging
-    config_dict: Dict[str, Any] = OmegaConf.to_container(cfg, resolve=True)
-
     # --- Initial phase of training ---
-    # This block executes if we are not specifically resuming a fine-tuning phase
-    if not cfg.finetune_on_checkpoint:
-        wandb_logger = WandbLogger(project=cfg.project, log_model=True)
-        # Initialize WandB run
-        wandb.init(config=config_dict, project=cfg.project, name=cfg.name)
-
-        # Initialize Lightning Trainer for the first training phase
-        trainer = L.Trainer(
-            max_epochs=cfg.epochs,
-            accelerator="auto",  # Automatically selects available accelerator (GPU/CPU)
-            devices="auto",  # Uses all available devices
-            logger=[wandb_logger],  # Logs metrics and model to WandB
-            log_every_n_steps=1,  # Logs every step
-            check_val_every_n_epoch=1,  # Runs validation every epoch
-        )
-
-        # Train and test the model
-        trainer.fit(model, datamodule=data_module)
-        trainer.test(model, datamodule=data_module)
-
-    # --- Fine-tuning on real data ---
-    # This block handles the specific case of fine-tuning, potentially after initial training
-    # or resuming from a checkpoint for fine-tuning.
-    if cfg.finetune_on_checkpoint and not cfg.fine_tune_on_real_data:
-        print(
-            "To enable finetune_on_checkpoint, you must also enable fine_tune_on_real_data"
-        )
-
-    if cfg.fine_tune_on_real_data:
-        print(cfg)  # Print the current configuration for review
-
-        # Initialize a new WandB logger for the fine-tuning phase
-        wandb_logger2 = WandbLogger(project=cfg.project, log_model=True)
-        # Initialize WandB run for fine-tuning, potentially resuming the previous run
+    if (
+        not cfg.finetune_on_checkpoint
+    ):  # This condition means we are doing initial training
+        wandb_logger_train = WandbLogger(
+            project=cfg.project, name=cfg.name, log_model=True
+        )  # Log model checkpoints
+        if (
+            wandb.run
+        ):  # If a run (e.g. from test_only) was active and not finished, finish it.
+            print(
+                "Warning: Previous wandb run was active. Finishing it before starting a new one for training."
+            )
+            wandb.finish()
         wandb.init(
-            config=config_dict,
-            project=cfg.project,
-            name=cfg.name + "_fine_tuned",  # Appends "_fine_tuned" to the run name
-            resume="allow",  # Allows resuming if the run already exists
-        )
+            config=config_dict, project=cfg.project, name=cfg.name
+        )  # Fresh run for training
 
-        # Prepare configuration for fine-tuning (e.g., reset data settings)
-        prepare_fine_tune(cfg)
-
-        # Re-initialize data module with potentially modified settings for fine-tuning
-        data_module = CIFAR10DataModule(cfg)
-        data_module.prepare_data()
-
-        # Initialize Lightning Trainer for the fine-tuning phase
-        fine_tune_trainer = L.Trainer(
+        trainer = L.Trainer(
             max_epochs=cfg.epochs,
             accelerator="auto",
             devices="auto",
-            logger=[wandb_logger2],
+            logger=[wandb_logger_train],
+            log_every_n_steps=1,
+            check_val_every_n_epoch=1,
+        )
+        if cfg.epochs > 0:
+            print("INFO: Starting initial training phase...")
+            trainer.fit(model, datamodule=data_module)
+            print("INFO: Initial training finished.")
+        else:
+            print("INFO: cfg.epochs is 0, skipping initial trainer.fit().")
+
+        print("INFO: Starting testing after initial training phase (or if epochs=0)...")
+        trainer.test(
+            model, datamodule=data_module
+        )  # Test after fit, or if only evaluation is intended with epochs=0
+        print("INFO: Testing finished.")
+        # wandb.finish() # Let WandB finish at the very end or when a new phase starts
+
+    # --- Fine-tuning on real data ---
+    if (
+        cfg.fine_tune_on_real_data
+    ):  # This block is independent of finetune_on_checkpoint for its execution
+        print("INFO: Preparing for fine-tuning phase...")
+
+        # Potentially re-init wandb for fine-tuning to have a distinct run or segment
+        ft_run_name = cfg.name + "_fine_tuned"
+        if wandb.run and wandb.run.name != ft_run_name:  # If a different run is active
+            wandb.finish()
+        if wandb.run is None or wandb.run.name != ft_run_name:
+            wandb.init(
+                config=config_dict,
+                project=cfg.project,
+                name=ft_run_name,
+                resume="allow",
+            )
+
+        wandb_logger_ft = WandbLogger(
+            project=cfg.project, name=ft_run_name, log_model=True
+        )
+
+        # Original logic for fine-tuning config and data module re-init
+        if cfg.finetune_on_checkpoint and not cfg.checkpoint_path:
+            print(
+                "\n\nERROR: 'fine_tune_on_real_data' and 'finetune_on_checkpoint' are true, but 'checkpoint_path' is not provided!\n\n"
+            )
+            if wandb.run:
+                wandb.finish()
+            return
+
+        prepare_fine_tune(cfg)  # Modifies cfg in-place for fine-tuning data settings
+
+        # Re-initialize data module with fine-tuning settings
+        # This call to prepare_data() is critical for fine-tuning specific data setup
+        fine_tune_data_module = CIFAR10DataModule(cfg)
+        fine_tune_data_module.prepare_data()
+
+        fine_tune_trainer = L.Trainer(
+            max_epochs=cfg.epochs,  # Uses the same epochs, or you might add cfg.fine_tune_epochs
+            accelerator="auto",
+            devices="auto",
+            logger=[wandb_logger_ft],
             log_every_n_steps=1,
             check_val_every_n_epoch=1,
         )
 
-        # Determine how to initialize the model for fine-tuning
-        if not cfg.finetune_on_checkpoint:
-            # If not loading from checkpoint, initialize a fresh model
-            model = ResNet18Model(cfg, class_weights=data_module.class_weights)
-        else:
-            # If fine-tuning from a checkpoint, ensure a checkpoint path is provided
-            if not cfg.checkpoint_path:
-                print("\n\nYou must provide a checkpoint path!\n\n")
-                return
-            # Load the model from the specified checkpoint
-            model = ResNet18Model.load_from_checkpoint(
-                checkpoint_path=cfg.checkpoint_path,
-                cfg=cfg,
-                class_weights=data_module.class_weights,
+        if cfg.finetune_on_checkpoint:
+            print(
+                f"INFO: Loading model from checkpoint for fine-tuning: {cfg.checkpoint_path}"
             )
+            model_ft = ResNet18Model.load_from_checkpoint(  # Use a new variable or overwrite model
+                checkpoint_path=cfg.checkpoint_path,
+                cfg=cfg,  # cfg might have been modified by prepare_fine_tune
+                class_weights=fine_tune_data_module.class_weights,
+            )
+        else:  # Fine-tune the model trained in the initial phase, or a fresh one if initial phase was skipped
+            print(
+                "INFO: Initializing/using existing model for fine-tuning (not from a specific fine-tune checkpoint)."
+            )
+            # If initial training happened, 'model' is already trained.
+            # If initial training was skipped (epochs=0) and no checkpoint_path, 'model' is fresh.
+            # We need to ensure 'model' is correctly set up with new class_weights if data changed.
+            model_ft = ResNet18Model(
+                cfg, class_weights=fine_tune_data_module.class_weights
+            )
+            # If 'model' was already loaded or trained, and we want to continue with it:
+            # model_ft = model # but update its config and weights if necessary
+            # For simplicity, let's assume if not finetune_on_checkpoint, we use the current 'model' state
+            # or re-initialize if that's cleaner. Here, re-initializing with new data params.
+            # If we want to continue from 'model' trained in the first phase:
+            # model.cfg = cfg # update config
+            # model.class_weights = fine_tune_data_module.class_weights # update weights
+            # model_ft = model
+            # The provided code initializes a new model or loads one.
+            # If initial training produced 'model', and we want to fine-tune THAT 'model'
+            # without loading another checkpoint, we should use that.
+            # Current logic: if finetune_on_checkpoint=False, it creates a NEW model.
+            # Let's adjust to use the existing 'model' if it was trained/loaded before this block.
+            if (
+                not cfg.get("checkpoint_path") and not cfg.finetune_on_checkpoint
+            ):  # if model is from initial training
+                model_ft = model  # Use the model from the previous stage
+                model_ft.cfg = cfg  # Update its config
+                model_ft.class_weights = (
+                    fine_tune_data_module.class_weights
+                )  # Update class weights for new data
+            else:  # if checkpoint_path was for initial load, or no initial training, make a fresh model
+                model_ft = ResNet18Model(
+                    cfg, class_weights=fine_tune_data_module.class_weights
+                )
 
-        # Freeze backbone if specified for transfer learning
         if cfg.freeze_backbone:
-            model.freeze_backbone()
+            print("INFO: Freezing model backbone for fine-tuning...")
+            model_ft.freeze_backbone()
 
-        # Compile model for fine-tuning if enabled
         if cfg.compile:
-            model = torch.compile(model)
+            print("INFO: Compiling model for fine-tuning...")
+            model_ft = torch.compile(model_ft)
 
-        # Train and test the model during the fine-tuning phase
-        fine_tune_trainer.fit(model, datamodule=data_module)
-        fine_tune_trainer.test(model, datamodule=data_module)
+        if cfg.epochs > 0:
+            print("INFO: Starting fine-tuning training phase...")
+            fine_tune_trainer.fit(model_ft, datamodule=fine_tune_data_module)
+            print("INFO: Fine-tuning training finished.")
+        else:
+            print("INFO: cfg.epochs is 0, skipping fine_tune_trainer.fit().")
 
-    # --- Visualization of trained model (optional) ---
-    # Generates and logs feature maps and convolutional filters to WandB.
-    if cfg.get("visualize_trained_model", False):
-        # Generate feature map and resized input image
-        feature_map_img, resized_img = visualize_feature_maps(
-            model, data_module, return_image=True
-        )
-        # Generate convolutional filter image
-        filter_img = visualize_filters(model, return_image=True)
+        print("INFO: Starting testing after fine-tuning phase...")
+        fine_tune_trainer.test(model_ft, datamodule=fine_tune_data_module)
+        print("INFO: Testing after fine-tuning finished.")
+        model = model_ft
 
-        # If fine-tuning was involved, re-initialize WandB to ensure visualizations
-        # are logged to the correct run or a new dedicated visualization run.
-        if cfg.get("finetune_on_checkpoint", False):
+    if cfg.get("visualize_trained_model", False) and not cfg.get("test_only", False):
+        print("INFO: Visualizing trained model...")
+        viz_run_name = cfg.name
+        if cfg.fine_tune_on_real_data:
+            viz_run_name += "_fine_tuned"
+        viz_run_name += "_viz"
+
+        if wandb.run is None or wandb.run.name != viz_run_name.replace("_viz", ""):
+            if wandb.run:
+                wandb.finish()
             wandb.init(
                 config=config_dict,
                 project=cfg.project,
-                name=cfg.name
-                + "viz",  # Appends "viz" to the run name for visualizations
+                name=viz_run_name,
                 resume="allow",
             )
 
-        # Log generated images to WandB
+        vis_data_module = data_module
+        if cfg.fine_tune_on_real_data:
+            vis_data_module = fine_tune_data_module
+
+        feature_map_img, resized_img = visualize_feature_maps(
+            model, vis_data_module, return_image=True
+        )
+        filter_img = visualize_filters(model, return_image=True)
+
         if feature_map_img is not None:
             wandb.log(
                 {"feature_maps": wandb.Image(feature_map_img, caption="Feature Maps")}
@@ -231,6 +405,11 @@ def main(cfg: DictConfig) -> None:
             )
         if filter_img is not None:
             wandb.log({"conv_filters": wandb.Image(filter_img, caption="Conv Filters")})
+        print("INFO: Visualization finished.")
+
+    if wandb.run:
+        wandb.finish()
+    print("INFO: Main script execution completed.")
 
 
 if __name__ == "__main__":
