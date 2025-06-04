@@ -21,10 +21,10 @@ name: base # WANDB run name
 project: cifar10_project # WANDB project name
 
 # Project/model settings
-epochs: 5
+epochs: 100
 compile: True
 batch_size: 256
-learning_rate: 0.00001
+learning_rate: 0.01
 val_size: 0.2
 num_workers: 1
 seed: 42
@@ -65,30 +65,30 @@ test_augmentations:
 # cutmix_or_mixup: False # Kept commented as per original for ResNet
 
 # Extra images settings
-add_extra_images: True
+add_extra_images: False
 extra_images_dir: /home/karol/sd-imbalance/generated_data/cifar10_synaug_sdxl_class_specific
 downsample_classes:
-  "airplane": 0.01
-  "automobile": 0.01
-  "bird": 0.01
-  "cat": 0.01
-  "deer": 0.01
-  "dog": 0.01
-  "frog": 0.01
-  "horse": 0.01
-  "ship": 0.01
-  "truck": 0.01
+  "airplane": 1
+  "automobile": 1
+  "bird": 1
+  "cat": 1
+  "deer": 1
+  "dog": 1
+  "frog": 1
+  "horse": 1
+  "ship": 1
+  "truck": 1
 extra_images_per_class:
-  "airplane": 4950
-  "automobile": 4950
-  "bird": 4950
-  "cat": 4950
-  "deer": 4950
-  "dog": 4950
-  "frog": 4950
-  "horse": 4950
-  "ship": 4950
-  "truck": 4950
+  "airplane": 0
+  "automobile": 0
+  "bird": 0
+  "cat": 0
+  "deer": 0
+  "dog": 0
+  "frog": 0
+  "horse": 0
+  "ship": 0
+  "truck": 0
 normalize_synthetic: "mean_std" # None, 'mean_std', or 'clahe'
 similarity_filter: # None, 'original', or 'synthetic'
 similarity_threshold: 0.8 # Threshold for similarity filtering
