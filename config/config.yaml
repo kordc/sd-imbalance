@@ -5,7 +5,7 @@ hydra:
     chdir: False # Do not change the working directory.
 
 # Model selection
-model_type: clip # New parameter: Choose 'resnet18' or 'clip'
+model_type: resnet18 # New parameter: Choose 'resnet18' or 'clip'
 clip_model_name: openai/clip-vit-base-patch32 # New: Specify CLIP model if model_type is 'clip'
 
 # Oversampling, Undersampling and regularization methods
@@ -26,7 +26,7 @@ compile: True
 batch_size: 256
 learning_rate: 0.01
 val_size: 0.2
-num_workers: 1
+num_workers: 2
 seed: 42
 checkpoint_path: # /home/karol/sd-imbalance/fullCIFAR.ckpt
 visualize_trained_model: True
